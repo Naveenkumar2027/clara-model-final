@@ -13,6 +13,8 @@ import { useNotification } from './NotificationProvider';
 import NotificationContainer from './NotificationContainer';
 import NotificationSync from './NotificationSync';
 import { apiService } from '../services/api';
+import IncomingCallModal from './IncomingCallModal';
+import { StaffRTC, type CallIncomingEvent } from '../services/StaffRTC';
 
 interface DashboardProps {
   user: StaffProfile;
@@ -48,6 +50,8 @@ const Header: React.FC<{ activeView: NavItem, onLogout: () => void, user?: Staff
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Dashboard' }) => {
   const [activeView, setActiveView] = useState<NavItem>(initialView);
+  const [incomingCall, setIncomingCall] = useState<CallIncomingEvent | null>(null);
+  const [staffRTC, setStaffRTC] = useState<StaffRTC | null>(null);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -65,6 +69,66 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
     setMeetings(savedMeetings ? JSON.parse(savedMeetings) : []);
     const savedGroups = localStorage.getItem('groups');
     setGroups(savedGroups ? JSON.parse(savedGroups) : []);
+
+    // Initialize unified RTC if enabled
+    const enableUnified = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true';
+    if (enableUnified && user) {
+      let token = localStorage.getItem('clara-jwt-token');
+      if (!token) {
+        // Auto-login for demo
+        fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:8080'}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: user.email,
+            role: 'staff',
+            staffId: user.id,
+            dept: user.department || 'general',
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            token = data.token;
+            if (token) {
+              localStorage.setItem('clara-jwt-token', token);
+              const rtc = new StaffRTC({
+                token,
+                staffId: user.id,
+              });
+              rtc.attachHandlers({
+                onIncoming: (call) => {
+                  setIncomingCall(call);
+                },
+                onUpdate: (update) => {
+                  console.log('Call update:', update);
+                },
+              });
+              setStaffRTC(rtc);
+            }
+          })
+          .catch(console.error);
+      } else {
+        const rtc = new StaffRTC({
+          token,
+          staffId: user.id,
+        });
+        rtc.attachHandlers({
+          onIncoming: (call) => {
+            setIncomingCall(call);
+          },
+          onUpdate: (update) => {
+            console.log('Call update:', update);
+          },
+        });
+        setStaffRTC(rtc);
+      }
+    }
+
+    return () => {
+      if (staffRTC) {
+        staffRTC.disconnect();
+      }
+    };
   }, [user]);
   
   // When active view changes away from Team Directory, clear the active chat
@@ -160,6 +224,26 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
     }
   };
 
+  const handleAcceptCall = async () => {
+    if (!incomingCall || !staffRTC) return;
+    const result = await staffRTC.accept(incomingCall.callId);
+    if (result) {
+      setIncomingCall(null);
+      // Handle accepted call - could show video UI
+      addNotification({
+        type: 'meeting',
+        title: 'Call Accepted',
+        message: `Video call with ${incomingCall.clientInfo.name || incomingCall.clientInfo.clientId} connected`,
+      });
+    }
+  };
+
+  const handleDeclineCall = async () => {
+    if (!incomingCall || !staffRTC) return;
+    await staffRTC.decline(incomingCall.callId, 'Declined by staff');
+    setIncomingCall(null);
+  };
+
   return (
     <UserContext.Provider value={{ user }}>
       <div className="flex min-h-screen bg-gradient-to-br from-[#0f172a] to-[#1e1b4b] p-4 lg:p-6 font-sans">
@@ -174,6 +258,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
         <NotificationSync userId={user.id} isActive={activeView !== 'Team Directory'} />
         {/* Show notifications in all views except Team Directory */}
         {activeView !== 'Team Directory' && <NotificationContainer />}
+        {/* Incoming call modal */}
+        <IncomingCallModal
+          visible={!!incomingCall}
+          call={incomingCall}
+          onAccept={handleAcceptCall}
+          onDecline={handleDeclineCall}
+        />
       </div>
     </UserContext.Provider>
   );

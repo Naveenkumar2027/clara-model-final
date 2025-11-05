@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
+import { CallService } from './src/services/CallService';
 
 // --- Helper functions for Audio Encoding/Decoding ---
 
@@ -336,6 +337,8 @@ const App = () => {
     const [preChatDetails, setPreChatDetails] = useState(null);
     const [view, setView] = useState('chat'); // 'chat', 'video_call'
     const [videoCallTarget, setVideoCallTarget] = useState(null);
+    const [unifiedCallService, setUnifiedCallService] = useState<CallService | null>(null);
+    const [isUnifiedCalling, setIsUnifiedCalling] = useState(false);
     
     const sessionPromiseRef = useRef(null);
     const inputAudioContextRef = useRef(null);
@@ -369,6 +372,43 @@ const App = () => {
             sessionStorage.removeItem('clara-chat-history');
         } catch (error) {
             console.error("Failed to clear session storage", error);
+        }
+        
+        // Initialize unified call service if enabled
+        const enableUnified = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true';
+        if (enableUnified) {
+            // Get or create token
+            let token = localStorage.getItem('clara-jwt-token');
+            if (!token) {
+                // Auto-login for demo (in production, this should come from auth)
+                fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:8080'}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: 'client-' + Date.now(),
+                        role: 'client',
+                    }),
+                })
+                    .then((res) => res.json())
+                    .then((data) => {
+                        token = data.token;
+                        if (token) {
+                            localStorage.setItem('clara-jwt-token', token);
+                            const service = new CallService({
+                                token,
+                                clientId: 'client-' + Date.now(),
+                            });
+                            setUnifiedCallService(service);
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                const service = new CallService({
+                    token,
+                    clientId: localStorage.getItem('clara-client-id') || 'client-' + Date.now(),
+                });
+                setUnifiedCallService(service);
+            }
         }
         
         // Don't set messages here - let handleStartConversation set the greeting after login
@@ -825,6 +865,64 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                             <VideoCallHeaderIcon />
                             <span>Video Call</span>
                         </div>
+                        {import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true' && unifiedCallService && (
+                            <div 
+                                className="header-button unified-call" 
+                                onClick={async () => {
+                                    if (isUnifiedCalling) return;
+                                    setIsUnifiedCalling(true);
+                                    try {
+                                        const result = await unifiedCallService.startCall({
+                                            department: 'general',
+                                            purpose: 'Client video call',
+                                            onAccepted: (callId, pc, stream) => {
+                                                console.log('Call accepted:', callId);
+                                                // Handle accepted call - could show video UI
+                                                setMessages(prev => [...prev, {
+                                                    sender: 'clara',
+                                                    text: 'Video call connected!',
+                                                    isFinal: true,
+                                                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                                }]);
+                                            },
+                                            onDeclined: (reason) => {
+                                                setMessages(prev => [...prev, {
+                                                    sender: 'clara',
+                                                    text: reason || 'Call declined',
+                                                    isFinal: true,
+                                                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                                }]);
+                                            },
+                                            onError: (error) => {
+                                                console.error('Call error:', error);
+                                                setMessages(prev => [...prev, {
+                                                    sender: 'clara',
+                                                    text: 'Failed to start call: ' + error.message,
+                                                    isFinal: true,
+                                                    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                                }]);
+                                            },
+                                        });
+                                        if (result) {
+                                            setMessages(prev => [...prev, {
+                                                sender: 'clara',
+                                                text: 'Initiating video call...',
+                                                isFinal: true,
+                                                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                                            }]);
+                                        }
+                                    } catch (error) {
+                                        console.error('Failed to start call:', error);
+                                    } finally {
+                                        setIsUnifiedCalling(false);
+                                    }
+                                }}
+                                style={{ cursor: isUnifiedCalling ? 'not-allowed' : 'pointer', opacity: isUnifiedCalling ? 0.6 : 1 }}
+                            >
+                                <VideoCallHeaderIcon />
+                                <span>{isUnifiedCalling ? 'Calling...' : 'Unified Call'}</span>
+                            </div>
+                        )}
                          <div className="status-indicator">
                             <div className="status-dot"></div>
                             <span>Ready to chat</span>
