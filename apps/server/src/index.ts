@@ -111,8 +111,8 @@ const authLimiter = rateLimit({
 // Health check
 app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
 
-// Auth endpoint
-const loginSchema = z.object({
+// Auth endpoints - support both unified and staff formats
+const unifiedLoginSchema = z.object({
   username: z.string(),
   password: z.string().optional(),
   role: z.enum(['client', 'staff']),
@@ -120,16 +120,118 @@ const loginSchema = z.object({
   dept: z.string().optional(),
 });
 
+const staffLoginSchema = z.object({
+  email: z.string().email(),
+  password: z.string(),
+});
+
 app.post('/api/auth/login', authLimiter, async (req, res) => {
-  const parsed = loginSchema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
+  // Try staff format first (email/password)
+  const staffParsed = staffLoginSchema.safeParse(req.body);
+  if (staffParsed.success) {
+    const { email, password } = staffParsed.data;
+    // For demo: accept any email/password combination
+    // In production, verify against database
+    const userId = email;
+    const claims: AuthPayload = { 
+      userId, 
+      role: 'staff', 
+      staffId: email.split('@')[0], // Use email prefix as staffId
+      dept: 'general' 
+    };
+    
+    const token = jwt.sign(claims, JWT_SECRET, { algorithm: 'HS256', expiresIn: '15m' });
+    const refreshToken = jwt.sign({ userId }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' });
+    
+    // Return format expected by staff app
+    return res.json({ 
+      token, 
+      refreshToken,
+      user: {
+        id: userId,
+        email: email,
+        name: email.split('@')[0],
+        role: 'staff'
+      }
+    });
+  }
   
-  const { username, role, staffId, dept } = parsed.data;
-  const userId = username;
-  const claims: AuthPayload = { userId, role, staffId, dept };
+  // Try unified format (username/role)
+  const unifiedParsed = unifiedLoginSchema.safeParse(req.body);
+  if (unifiedParsed.success) {
+    const { username, role, staffId, dept } = unifiedParsed.data;
+    const userId = username;
+    const claims: AuthPayload = { userId, role, staffId, dept };
+    
+    const token = jwt.sign(claims, JWT_SECRET, { algorithm: 'HS256', expiresIn: '15m' });
+    return res.json({ token });
+  }
   
-  const token = jwt.sign(claims, JWT_SECRET, { algorithm: 'HS256', expiresIn: '15m' });
-  res.json({ token });
+  return res.status(400).json({ error: 'Invalid login format' });
+});
+
+// Staff auth refresh token endpoint
+app.post('/api/auth/refresh-token', authLimiter, async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(400).json({ error: 'Refresh token required' });
+  
+  try {
+    const payload = jwt.verify(refreshToken, JWT_SECRET) as { userId: string };
+    const claims: AuthPayload = { userId: payload.userId, role: 'staff' };
+    const newToken = jwt.sign(claims, JWT_SECRET, { algorithm: 'HS256', expiresIn: '15m' });
+    const newRefreshToken = jwt.sign({ userId: payload.userId }, JWT_SECRET, { algorithm: 'HS256', expiresIn: '7d' });
+    
+    res.json({ token: newToken, refreshToken: newRefreshToken });
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid refresh token' });
+  }
+});
+
+// Staff logout endpoint
+app.post('/api/auth/logout', authMiddleware, (_req, res) => {
+  res.json({ message: 'Logged out successfully' });
+});
+
+// Mock user data endpoint for staff app
+app.get('/api/user/:username', authMiddleware, async (req: Request & { user?: AuthPayload }, res) => {
+  const { username } = req.params;
+  // Return mock user data - in production, fetch from database
+  res.json({
+    user: {
+      id: req.user?.userId || username,
+      email: username.includes('@') ? username : `${username}@example.com`,
+      name: username.split('@')[0],
+      department: req.user?.dept || 'general',
+    },
+    meetings: [],
+    tasks: [],
+    timetable: [],
+  });
+});
+
+// Mock notifications endpoints for staff app
+app.get('/api/notifications', authMiddleware, (_req, res) => {
+  res.json({ notifications: [] });
+});
+
+app.get('/api/notifications/unread', authMiddleware, (_req, res) => {
+  res.json({ count: 0 });
+});
+
+app.post('/api/notifications', authMiddleware, (_req, res) => {
+  res.json({ message: 'Notification created', count: 0 });
+});
+
+app.patch('/api/notifications/:id/read', authMiddleware, (_req, res) => {
+  res.json({ notification: { id: _req.params.id, read: true } });
+});
+
+app.patch('/api/notifications/read-all', authMiddleware, (_req, res) => {
+  res.json({ message: 'All notifications marked as read' });
+});
+
+app.delete('/api/notifications/:id', authMiddleware, (_req, res) => {
+  res.json({ message: 'Notification deleted' });
 });
 
 // REST endpoints
@@ -261,38 +363,56 @@ app.post('/api/calls/ice', apiLimiter, authMiddleware, async (req, res) => {
 // Setup Socket.IO handlers
 setupSocketHandlers(io.of(NAMESPACE), callRepo);
 
-// Dev proxy vs prod static
+// Dev proxy vs prod static - Always serve from unified server
 if (ENABLE_UNIFIED) {
   const clientPath = process.env.CLIENT_PUBLIC_PATH || '/';
   const staffPath = process.env.STAFF_PUBLIC_PATH || '/staff';
   
   if (process.env.NODE_ENV === 'development') {
+    // Dev: Proxy to Vite dev servers but accessible via 8080
     app.use(clientPath === '/' ? '/' : clientPath, createProxyMiddleware({
       target: 'http://localhost:5173',
       changeOrigin: true,
       ws: true,
+      logLevel: 'warn',
     }));
     app.use(staffPath, createProxyMiddleware({
       target: 'http://localhost:5174',
       changeOrigin: true,
       ws: true,
+      logLevel: 'warn',
     }));
   } else {
-    app.use(clientPath, express.static(path.resolve(__dirname, '../../client/dist')));
-    app.use(staffPath, express.static(path.resolve(__dirname, '../../staff/dist')));
-    app.get(clientPath === '/' ? '/' : clientPath, (_req, res) => {
-      res.sendFile(path.resolve(__dirname, '../../client/dist/index.html'));
+    // Prod: Serve static builds
+    const clientDist = path.resolve(__dirname, '../../client/dist');
+    const staffDist = path.resolve(__dirname, '../../staff/dist');
+    
+    // Serve static files
+    app.use(clientPath, express.static(clientDist, { index: 'index.html' }));
+    app.use(staffPath, express.static(staffDist, { index: 'index.html' }));
+    
+    // SPA fallback routes (must come after static and API routes)
+    app.get(`${staffPath}/*`, (_req, res) => {
+      res.sendFile(path.join(staffDist, 'index.html'));
     });
-    app.get(staffPath, (_req, res) => {
-      res.sendFile(path.resolve(__dirname, '../../staff/dist/index.html'));
+    app.get(clientPath === '/' ? '/*' : `${clientPath}/*`, (_req, res) => {
+      res.sendFile(path.join(clientDist, 'index.html'));
     });
   }
 }
 
 const port = Number(process.env.PORT || 8080);
-server.listen(port, () => {
+server.listen(port, '0.0.0.0', () => {
   console.log(`Server listening on :${port}`);
   console.log(`Unified mode: ${ENABLE_UNIFIED}`);
+  console.log(`Health check: http://localhost:${port}/healthz`);
+}).on('error', (err: any) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${port} is already in use. Please free the port or change PORT in .env`);
+  } else {
+    console.error('Server error:', err);
+  }
+  process.exit(1);
 });
 
 // Graceful shutdown

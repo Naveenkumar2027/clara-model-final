@@ -1,6 +1,17 @@
 import { Pool, QueryResult } from 'pg';
-import type { CallSession } from '@clara/shared';
 import dotenv from 'dotenv';
+
+type CallSession = {
+  call_id: string;
+  client_id: string;
+  staff_id?: string;
+  dept_code?: string;
+  state: 'created' | 'ringing' | 'accepted' | 'declined' | 'ended';
+  created_at: number;
+  updated_at: number;
+  sdp_offer?: any;
+  sdp_answer?: any;
+};
 
 dotenv.config();
 

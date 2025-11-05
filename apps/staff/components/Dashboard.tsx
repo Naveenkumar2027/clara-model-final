@@ -76,7 +76,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
       let token = localStorage.getItem('clara-jwt-token');
       if (!token) {
         // Auto-login for demo
-        fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:8080'}/api/auth/login`, {
+        const apiBase = import.meta.env.VITE_API_BASE || 
+          (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
+        fetch(`${apiBase}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -129,7 +131,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
         staffRTC.disconnect();
       }
     };
-  }, [user]);
+  }, [user, staffRTC]);
   
   // When active view changes away from Team Directory, clear the active chat
   useEffect(() => {

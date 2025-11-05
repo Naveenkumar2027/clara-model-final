@@ -1,7 +1,20 @@
 import { Namespace } from 'socket.io';
-import type { AuthPayload, CallSession } from '@clara/shared';
-import { rooms } from '@clara/shared';
 import { CallRepository } from './repository.js';
+
+type AuthPayload = {
+  userId: string;
+  role: 'client' | 'staff';
+  staffId?: string;
+  dept?: string;
+  tenant?: string;
+};
+
+const rooms = {
+  staff: (id: string) => `staff:${id}`,
+  dept: (code: string) => `dept:${code}`,
+  client: (id: string) => `client:${id}`,
+  call: (id: string) => `call:${id}`,
+};
 
 export function setupSocketHandlers(nsp: Namespace, callRepo: CallRepository) {
   nsp.on('connection', (socket) => {

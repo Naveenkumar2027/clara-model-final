@@ -17,7 +17,8 @@ interface CallICEEvent {
   candidate: RTCIceCandidateInit;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+const API_BASE = import.meta.env.VITE_API_BASE || 
+  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
 const SOCKET_PATH = import.meta.env.VITE_SOCKET_PATH || '/socket';
 const ENABLE_UNIFIED = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true';
 

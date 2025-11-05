@@ -381,7 +381,9 @@ const App = () => {
             let token = localStorage.getItem('clara-jwt-token');
             if (!token) {
                 // Auto-login for demo (in production, this should come from auth)
-                fetch(`${import.meta.env.VITE_API_BASE || 'http://localhost:8080'}/api/auth/login`, {
+                const apiBase = import.meta.env.VITE_API_BASE || 
+                  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
+                fetch(`${apiBase}/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -390,17 +392,19 @@ const App = () => {
                     }),
                 })
                     .then((res) => res.json())
-                    .then((data) => {
-                        token = data.token;
-                        if (token) {
-                            localStorage.setItem('clara-jwt-token', token);
-                            const service = new CallService({
-                                token,
-                                clientId: 'client-' + Date.now(),
-                            });
-                            setUnifiedCallService(service);
-                        }
-                    })
+                .then((data) => {
+                    token = data.token;
+                    if (token) {
+                        localStorage.setItem('clara-jwt-token', token);
+                        const clientId = 'client-' + Date.now();
+                        localStorage.setItem('clara-client-id', clientId);
+                        const service = new CallService({
+                            token,
+                            clientId,
+                        });
+                        setUnifiedCallService(service);
+                    }
+                })
                     .catch(console.error);
             } else {
                 const service = new CallService({
