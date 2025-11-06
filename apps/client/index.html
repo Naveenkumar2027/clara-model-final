@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
+            --font-family: 'Poppins', sans-serif;
             --background-color: #F0F0F8;
             --container-bg-color: #FFFFFF;
             --header-bg-color: #6964D9;
@@ -119,6 +120,33 @@
         .form-field textarea {
             resize: vertical;
             min-height: 70px;
+        }
+        .required-asterisk {
+            color: #F44336;
+            margin-left: 2px;
+        }
+        .demo-call-button-container {
+            display: flex;
+            justify-content: center;
+            padding: 16px 0;
+            margin-top: 8px;
+        }
+        .demo-call-button {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: var(--header-bg-color);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .demo-call-button:hover {
+            background-color: #5550b3;
         }
         .modal-content button[type="submit"] {
             background-color: var(--header-bg-color);
@@ -521,18 +549,226 @@
                 height: 80vh;
             }
         }
+
+        /* Welcome Screen Styles */
+        .welcome-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            overflow: hidden;
+        }
+        .welcome-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a4d5e 0%, #1e3a5f 50%, #2d1b4e 100%);
+            z-index: -1;
+        }
+        .circuit-pattern {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 40%;
+            height: 40%;
+            background-image: 
+                radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 0);
+            background-size: 40px 40px;
+            opacity: 0.3;
+        }
+        .wave-pattern {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 50%;
+            height: 50%;
+            background: 
+                radial-gradient(ellipse at bottom right, rgba(255,255,255,0.1) 0%, transparent 70%);
+            opacity: 0.4;
+        }
+        .welcome-content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 40px;
+            max-width: 1200px;
+            width: 100%;
+        }
+        .welcome-logo-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 60px;
+            flex-wrap: wrap;
+        }
+        .svit-logo {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        .logo-circle {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .logo-flame {
+            width: 60px;
+            height: 80px;
+            background: linear-gradient(180deg, #ff8c00 0%, #ff6b00 100%);
+            clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+        }
+        .logo-text {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.9);
+            font-family: 'Times New Roman', serif;
+        }
+        .logo-sanskrit {
+            font-size: 11px;
+            letter-spacing: 1px;
+        }
+        .logo-acronym {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+        }
+        .svit {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+            letter-spacing: 2px;
+        }
+        .motto {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.8);
+            font-style: italic;
+        }
+        .institute-name {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        .sai-vidya {
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            font-family: 'Times New Roman', serif;
+            margin: 0;
+            letter-spacing: 2px;
+        }
+        .institute {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.9);
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+            letter-spacing: 1px;
+        }
+        .welcome-message-section {
+            margin-bottom: 50px;
+        }
+        .welcome-title {
+            font-size: 72px;
+            font-weight: bold;
+            color: white;
+            font-family: 'Times New Roman', serif;
+            margin: 0 0 20px 0;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .welcome-subtitle {
+            font-size: 28px;
+            color: rgba(255, 255, 255, 0.95);
+            font-family: 'Poppins', sans-serif;
+            margin: 0;
+        }
+        .start-conversation-btn {
+            background-color: white;
+            color: black;
+            border: 2px solid black;
+            padding: 16px 48px;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: 500;
+            font-family: 'Poppins', sans-serif;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 60px;
+        }
+        .start-conversation-btn:hover {
+            background-color: rgba(255, 255, 255, 0.95);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        .start-conversation-btn:active {
+            transform: translateY(0);
+        }
+        .powered-by {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 5px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 12px;
+        }
+        .clara-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .welcome-logo-section {
+                flex-direction: column;
+                gap: 20px;
+            }
+            .welcome-title {
+                font-size: 48px;
+            }
+            .welcome-subtitle {
+                font-size: 20px;
+            }
+            .sai-vidya {
+                font-size: 36px;
+            }
+            .institute {
+                font-size: 14px;
+            }
+            .powered-by {
+                bottom: 20px;
+                right: 20px;
+                font-size: 10px;
+            }
+            .clara-name {
+                font-size: 14px;
+            }
+        }
     </style>
-    <script type="module" src="index.tsx"></script>
-  <script type="importmap">
-{
-  "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0"
-  }
-}
-</script>
+    <script type="module" src="/index.tsx"></script>
 </head>
   <body>
     <div id="root"></div>

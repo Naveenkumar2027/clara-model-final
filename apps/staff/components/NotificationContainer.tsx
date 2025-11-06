@@ -6,6 +6,7 @@ const iconMap = {
     message: 'fa-solid fa-comment-dots',
     meeting: 'fa-solid fa-calendar-check',
     system: 'fa-solid fa-info-circle',
+    call: 'fa-solid fa-phone',
 };
 
 const NotificationCard: React.FC<{ notification: any, onDismiss: (id: number) => void }> = ({ notification, onDismiss }) => {

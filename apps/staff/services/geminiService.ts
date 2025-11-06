@@ -1,10 +1,11 @@
 import { GoogleGenAI, LiveSession, LiveServerMessage, Modality, Blob as GenAI_Blob, Type } from "@google/genai";
 
-if (!process.env.API_KEY) {
-    console.warn("API_KEY environment variable not set. Please set it in your environment.");
+const apiKey = process.env.API_KEY || (typeof window !== 'undefined' ? (window as any).__VITE_API_KEY__ : '') || '';
+if (!apiKey) {
+    console.warn("API_KEY environment variable not set. Please set GEMINI_API_KEY in .env file.");
 }
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const ai = new GoogleGenAI({ apiKey: apiKey || 'dummy' });
 
 export const createLiveSession = (callbacks: {
     onopen: () => void;

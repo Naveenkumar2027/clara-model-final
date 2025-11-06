@@ -55,14 +55,20 @@ export class StaffRTC {
   private ensureSocket() {
     if (!this.socket) {
       const socketUrl = this.apiBase.replace(/\/api$/, '');
-      this.socket = io(socketUrl, {
+      // Connect to /rtc namespace (same as client CallService)
+      this.socket = io(`${socketUrl}/rtc`, {
         path: SOCKET_PATH,
         auth: { token: this.token },
       });
 
       // Join staff room
       this.socket.on('connect', () => {
-        console.log('Staff socket connected');
+        console.log('Staff socket connected to /rtc namespace');
+        console.log('Staff ID:', this.staffId);
+      });
+
+      this.socket.on('connect_error', (error) => {
+        console.error('Staff socket connection error:', error);
       });
     }
     return this.socket;

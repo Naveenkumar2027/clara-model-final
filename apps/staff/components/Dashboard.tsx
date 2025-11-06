@@ -84,7 +84,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
           body: JSON.stringify({
             username: user.email,
             role: 'staff',
-            staffId: user.id,
+            staffId: user.id.includes('@') ? user.id.split('@')[0] : user.id, // Use email prefix
             dept: user.department || 'general',
           }),
         })
@@ -93,13 +93,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
             token = data.token;
             if (token) {
               localStorage.setItem('clara-jwt-token', token);
+              // Server uses email prefix as staffId (e.g., 'nagashreen' from 'nagashreen@gmail.com')
+              const staffId = user.id.includes('@') ? user.id.split('@')[0] : user.id;
               const rtc = new StaffRTC({
                 token,
-                staffId: user.id,
+                staffId: staffId,
               });
               rtc.attachHandlers({
                 onIncoming: (call) => {
                   setIncomingCall(call);
+                  // Add floating glassy notification showing caller name
+                  const callerName = call.clientInfo?.name || call.clientInfo?.clientId || 'Unknown caller';
+                  addNotification({
+                    type: 'call',
+                    title: 'Incoming Call',
+                    message: `Incoming video call from ${callerName}`
+                  });
                 },
                 onUpdate: (update) => {
                   console.log('Call update:', update);
@@ -110,13 +119,22 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
           })
           .catch(console.error);
       } else {
+        // Server uses email prefix as staffId (e.g., 'nagashreen' from 'nagashreen@gmail.com')
+        const staffId = user.id.includes('@') ? user.id.split('@')[0] : user.id;
         const rtc = new StaffRTC({
           token,
-          staffId: user.id,
+          staffId: staffId,
         });
         rtc.attachHandlers({
           onIncoming: (call) => {
             setIncomingCall(call);
+            // Add floating glassy notification showing caller name
+            const callerName = call.clientInfo?.name || call.clientInfo?.clientId || 'Unknown caller';
+            addNotification({
+              type: 'call',
+              title: 'Incoming Call',
+              message: `Incoming video call from ${callerName}`
+            });
           },
           onUpdate: (update) => {
             console.log('Call update:', update);
