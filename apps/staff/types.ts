@@ -25,6 +25,32 @@ export interface TimetableEntry {
   isRecurring?: boolean;
 }
 
+// New types for semester-based timetable
+export interface SemesterClass {
+  time: string;
+  subject: string;
+  subjectCode?: string;
+  courseName?: string;
+  classType?: "Theory" | "Lab" | "Free";
+  batch?: string;
+  room?: string;
+  isFree?: boolean;
+}
+
+export interface SemesterTimetable {
+  faculty: string;
+  designation?: string;
+  semester: string;
+  schedule: {
+    Monday?: SemesterClass[];
+    Tuesday?: SemesterClass[];
+    Wednesday?: SemesterClass[];
+    Thursday?: SemesterClass[];
+    Friday?: SemesterClass[];
+    Saturday?: SemesterClass[];
+  };
+}
+
 export interface Appointment {
   id: string;
   clientName: string;

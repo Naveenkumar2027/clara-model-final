@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { StaffProfile, Group, Meeting, ChatMessage } from '../types';
-import { STAFF_PROFILES } from '../constants';
+import { STAFF_PROFILES, getStaffRole } from '../constants';
 
 interface TeamDirectoryProps {
     isHod: boolean;
@@ -195,7 +195,7 @@ const TeamDirectory: React.FC<TeamDirectoryProps> = ({ isHod, currentUser, group
                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center font-bold">{staff.avatar}</div>
                             <div>
                                 <p className="font-semibold">{staff.name}</p>
-                                <p className="text-sm text-slate-400">{staff.email}</p>
+                                <p className="text-sm text-slate-400">{getStaffRole(staff)}</p>
                             </div>
                         </div>
                     ))}

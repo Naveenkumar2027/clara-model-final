@@ -198,7 +198,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
       case 'Dashboard':
         return <DashboardHome timetable={timetable} meetings={meetings} />;
       case 'Timetable':
-        return <Timetable initialTimetable={timetable} onTimetableUpdate={handleTimetableUpdate} />;
+        return <Timetable initialTimetable={timetable} onTimetableUpdate={handleTimetableUpdate} user={user} />;
       case 'Appointments':
         return <Appointments />;
       case 'Task Management':

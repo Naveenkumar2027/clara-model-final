@@ -1,6 +1,21 @@
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE
-  ? `${import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE}/api`
-  : (typeof window !== 'undefined' ? `${window.location.origin}/api` : 'http://localhost:8080/api');
+// Determine API base URL - prefer env vars, otherwise use unified server
+const getApiBaseUrl = () => {
+  if (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE) {
+    return `${import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE}/api`;
+  }
+  // In development, always use the unified server on port 8080
+  if (typeof window !== 'undefined') {
+    // If accessed through unified server, use current origin
+    if (window.location.port === '8080' || window.location.pathname.startsWith('/staff')) {
+      return `${window.location.origin}/api`;
+    }
+    // Otherwise, use the unified server port
+    return 'http://localhost:8080/api';
+  }
+  return 'http://localhost:8080/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface ApiResponse<T> {
   data?: T;

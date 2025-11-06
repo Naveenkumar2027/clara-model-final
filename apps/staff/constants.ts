@@ -2,6 +2,27 @@ import { StaffProfile, TimetableEntry, Appointment, CallLog, CallUpdate, Activit
 
 export const HOD_EMAIL = 'nagashreen@gmail.com';
 
+/**
+ * Get the role label for a staff member based on their name or email
+ * @param staff - StaffProfile object or object with name and email
+ * @returns "Head of Department" for Nagashreen, "Staff" for others
+ */
+export const getStaffRole = (staff: { name: string; email?: string }): string => {
+  const name = staff.name?.toLowerCase() || '';
+  const email = staff.email?.toLowerCase() || '';
+  const hodEmail = HOD_EMAIL.toLowerCase();
+  
+  // Check if email matches HOD_EMAIL (most reliable)
+  // Or if name contains "nagashreen" or "nagashree" (handles variations)
+  if (email === hodEmail || 
+      name.includes('nagashreen') || 
+      name.includes('nagashree')) {
+    return 'Head of Department';
+  }
+  
+  return 'Staff';
+};
+
 export const STAFF_PROFILES: StaffProfile[] = [
   {
     id: 'ldn',
