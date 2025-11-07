@@ -41,6 +41,7 @@ type CallSession = {
 };
 import { CallRepository } from './repository.js';
 import { setupSocketHandlers } from './socket.js';
+import { TimetableRepository, type FacultyTimetable } from './timetableRepository.js';
 
 dotenv.config();
 
@@ -92,8 +93,9 @@ io.of(NAMESPACE).use((socket, next) => {
   }
 });
 
-// Initialize repository
+// Initialize repositories
 const callRepo = new CallRepository();
+const timetableRepo = new TimetableRepository();
 
 // Helper function to create complete StaffProfile objects
 function createStaffProfile(email: string, dept?: string): {
@@ -256,6 +258,329 @@ app.patch('/api/notifications/read-all', authMiddleware, (_req, res) => {
 
 app.delete('/api/notifications/:id', authMiddleware, (_req, res) => {
   res.json({ message: 'Notification deleted' });
+});
+
+// Timetable endpoints
+type AuthPayloadWithEmail = AuthPayload & { email?: string };
+
+// Helper to check if user can edit timetable
+function canEditTimetable(req: Request & { user?: AuthPayloadWithEmail }, facultyId: string): boolean {
+  if (!req.user) {
+    console.log('canEditTimetable: No user in request');
+    return false;
+  }
+  
+  const userId = req.user.userId?.toLowerCase() || '';
+  const email = req.user.email?.toLowerCase() || userId;
+  const staffId = req.user.staffId?.toLowerCase() || '';
+  const targetId = facultyId.toLowerCase().replace(/[^a-z0-9]/g, '');
+  
+  console.log('canEditTimetable check:', {
+    userId,
+    email,
+    staffId,
+    targetId,
+    role: req.user.role
+  });
+  
+  // Admin can edit any timetable (check for admin role or email)
+  if (req.user.role === 'staff' && (
+    userId.includes('admin') ||
+    email === 'nagashreen@gmail.com' || // HOD is admin
+    userId === 'nagashreen@gmail.com' ||
+    email.includes('nagashreen')
+  )) {
+    console.log('canEditTimetable: User is admin - allowing edit');
+    return true;
+  }
+  
+  // Faculty can edit their own timetable
+  // Normalize IDs for comparison (remove @domain, special chars)
+  const normalizedUserId = userId.replace(/[^a-z0-9]/g, '');
+  const normalizedEmail = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+  const normalizedStaffId = staffId.replace(/[^a-z0-9]/g, '');
+  
+  const canEdit = normalizedUserId === targetId ||
+         normalizedStaffId === targetId ||
+         normalizedEmail === targetId ||
+         email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') === targetId ||
+         userId.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '') === targetId;
+  
+  console.log('canEditTimetable result:', canEdit, {
+    normalizedUserId,
+    normalizedEmail,
+    normalizedStaffId,
+    targetId
+  });
+  
+  return canEdit;
+}
+
+// Timetable schema for validation
+const timetableSchema = z.object({
+  faculty: z.string(),
+  designation: z.string().optional(),
+  semester: z.string(),
+  schedule: z.object({
+    Monday: z.array(z.object({
+      time: z.string(),
+      subject: z.string(),
+      subjectCode: z.string().optional(),
+      courseName: z.string().optional(),
+      classType: z.enum(['Theory', 'Lab', 'Free', 'Busy']).optional(),
+      batch: z.string().optional(),
+      room: z.string().optional(),
+    })).optional(),
+    Tuesday: z.array(z.object({
+      time: z.string(),
+      subject: z.string(),
+      subjectCode: z.string().optional(),
+      courseName: z.string().optional(),
+      classType: z.enum(['Theory', 'Lab', 'Free', 'Busy']).optional(),
+      batch: z.string().optional(),
+      room: z.string().optional(),
+    })).optional(),
+    Wednesday: z.array(z.object({
+      time: z.string(),
+      subject: z.string(),
+      subjectCode: z.string().optional(),
+      courseName: z.string().optional(),
+      classType: z.enum(['Theory', 'Lab', 'Free', 'Busy']).optional(),
+      batch: z.string().optional(),
+      room: z.string().optional(),
+    })).optional(),
+    Thursday: z.array(z.object({
+      time: z.string(),
+      subject: z.string(),
+      subjectCode: z.string().optional(),
+      courseName: z.string().optional(),
+      classType: z.enum(['Theory', 'Lab', 'Free', 'Busy']).optional(),
+      batch: z.string().optional(),
+      room: z.string().optional(),
+    })).optional(),
+    Friday: z.array(z.object({
+      time: z.string(),
+      subject: z.string(),
+      subjectCode: z.string().optional(),
+      courseName: z.string().optional(),
+      classType: z.enum(['Theory', 'Lab', 'Free', 'Busy']).optional(),
+      batch: z.string().optional(),
+      room: z.string().optional(),
+    })).optional(),
+    Saturday: z.array(z.object({
+      time: z.string(),
+      subject: z.string(),
+      subjectCode: z.string().optional(),
+      courseName: z.string().optional(),
+      classType: z.enum(['Theory', 'Lab', 'Free', 'Busy']).optional(),
+      batch: z.string().optional(),
+      room: z.string().optional(),
+    })).optional(),
+  }),
+  workload: z.object({
+    theory: z.number(),
+    lab: z.number(),
+    totalUnits: z.number(),
+  }).optional(),
+});
+
+// GET /api/timetables/:facultyId/:semester - Get timetable
+app.get('/api/timetables/:facultyId/:semester', apiLimiter, authMiddleware, async (req: Request & { user?: AuthPayloadWithEmail }, res) => {
+  const { facultyId, semester } = req.params;
+  
+  try {
+    // Normalize facultyId - remove @domain if present
+    const normalizedFacultyId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
+    const timetable = await timetableRepo.get(normalizedFacultyId, semester);
+    if (!timetable) {
+      res.status(404).json({ error: 'Timetable not found' });
+      return;
+    }
+    
+    // Check access - user can view their own or admin can view any
+    if (!canEditTimetable(req, normalizedFacultyId)) {
+      // Return read-only version
+      const { editHistory, ...readOnlyTimetable } = timetable;
+      res.json(readOnlyTimetable);
+      return;
+    }
+    
+    res.json(timetable);
+  } catch (e) {
+    console.error('Error fetching timetable:', e);
+    res.status(500).json({ error: 'Failed to fetch timetable' });
+  }
+});
+
+// GET /api/timetables/semester/:semester - Get all timetables for a semester (admin only)
+app.get('/api/timetables/semester/:semester', apiLimiter, authMiddleware, async (req: Request & { user?: AuthPayloadWithEmail }, res) => {
+  const { semester } = req.params;
+  
+  try {
+    // Check if user is admin
+    const userId = req.user?.userId?.toLowerCase() || '';
+    const email = req.user?.email?.toLowerCase() || userId;
+    const isAdmin = req.user?.role === 'staff' && (
+      userId.includes('admin') ||
+      email === 'nagashreen@gmail.com' ||
+      userId === 'nagashreen@gmail.com'
+    );
+    
+    if (!isAdmin) {
+      res.status(403).json({ error: 'Access denied. Admin only.' });
+      return;
+    }
+    
+    const timetables = await timetableRepo.getAllForSemester(semester);
+    res.json(timetables);
+  } catch (e) {
+    console.error('Error fetching timetables for semester:', e);
+    res.status(500).json({ error: 'Failed to fetch timetables' });
+  }
+});
+
+// PATCH /api/timetables/:facultyId - Update timetable
+app.patch('/api/timetables/:facultyId', apiLimiter, authMiddleware, async (req: Request & { user?: AuthPayloadWithEmail }, res) => {
+  const { facultyId } = req.params;
+  
+  console.log('Timetable update request:', {
+    facultyId,
+    userId: req.user?.userId,
+    email: req.user?.email,
+    staffId: req.user?.staffId,
+    role: req.user?.role
+  });
+  
+  // Normalize facultyId - remove @domain if present and clean up
+  const normalizedFacultyId = (facultyId.includes('@') ? facultyId.split('@')[0] : facultyId)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
+  
+  console.log('Normalized faculty ID:', normalizedFacultyId);
+  
+  // Check edit permission
+  const hasPermission = canEditTimetable(req, normalizedFacultyId);
+  console.log('Permission check result:', hasPermission);
+  
+  if (!hasPermission) {
+    console.error('Access denied for timetable update:', {
+      facultyId: normalizedFacultyId,
+      userId: req.user?.userId,
+      email: req.user?.email
+    });
+    return res.status(403).json({ 
+      error: 'Access denied. You can only edit your own timetable.',
+      details: {
+        requestedFacultyId: normalizedFacultyId,
+        userUserId: req.user?.userId,
+        userEmail: req.user?.email,
+        userStaffId: req.user?.staffId
+      }
+    });
+  }
+  
+  console.log('✅ Permission granted for timetable update');
+  
+  const parsed = timetableSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.message });
+  }
+  
+  const timetableData = parsed.data;
+  const editedBy = req.user?.userId || req.user?.email || req.user?.staffId || 'unknown';
+  
+  // Validate schedule - check for overlapping times within same day
+  const validationErrors: string[] = [];
+  Object.entries(timetableData.schedule).forEach(([day, classes]) => {
+    if (!classes || classes.length === 0) return;
+    const sortedClasses = [...classes].sort((a, b) => {
+      const [aStart] = a.time.split('-');
+      const [bStart] = b.time.split('-');
+      return aStart.localeCompare(bStart);
+    });
+    
+    for (let i = 0; i < sortedClasses.length - 1; i++) {
+      const current = sortedClasses[i];
+      const next = sortedClasses[i + 1];
+      const [currentStart, currentEnd] = current.time.split('-');
+      const [nextStart, nextEnd] = next.time.split('-');
+      
+      if (currentEnd > nextStart) {
+        validationErrors.push(`${day}: Overlapping classes ${current.time} and ${next.time}`);
+      }
+    }
+  });
+  
+  if (validationErrors.length > 0) {
+    return res.status(400).json({ 
+      error: 'Validation failed', 
+      details: validationErrors 
+    });
+  }
+  
+  try {
+    // Calculate workload if not provided
+    let workload = timetableData.workload;
+    if (!workload) {
+      let theoryHours = 0;
+      let labHours = 0;
+      
+      Object.values(timetableData.schedule).forEach(dayClasses => {
+        if (!dayClasses) return;
+        dayClasses.forEach(cls => {
+          const [start, end] = cls.time.split('-');
+          const [startH, startM] = start.split(':').map(Number);
+          const [endH, endM] = end.split(':').map(Number);
+          const duration = (endH * 60 + endM - (startH * 60 + startM)) / 60;
+          
+          if (cls.classType === 'Theory') {
+            theoryHours += duration;
+          } else if (cls.classType === 'Lab') {
+            labHours += duration;
+          }
+        });
+      });
+      
+      workload = {
+        theory: Math.round(theoryHours),
+        lab: Math.round(labHours),
+        totalUnits: Math.round(theoryHours + labHours),
+      };
+    }
+    
+    const timetable: FacultyTimetable = {
+      facultyId: normalizedFacultyId.toLowerCase(),
+      faculty: timetableData.faculty,
+      designation: timetableData.designation,
+      semester: timetableData.semester,
+      schedule: timetableData.schedule as FacultyTimetable['schedule'], // Type assertion for Busy support
+      workload,
+      updatedAt: new Date().toISOString(),
+      editHistory: [],
+    };
+    
+    const updated = await timetableRepo.createOrUpdate(
+      timetable,
+      editedBy,
+      `Updated timetable for ${timetableData.semester}`
+    );
+    
+    // Emit real-time update via Socket.IO
+    io.of(NAMESPACE).emit('timetable:updated', {
+      facultyId: normalizedFacultyId,
+      semester: timetableData.semester,
+      timetable: updated,
+    });
+    
+    return res.json({ 
+      success: true,
+      timetable: updated,
+      message: 'Timetable updated successfully'
+    });
+  } catch (e) {
+    console.error('Error updating timetable:', e);
+    return res.status(500).json({ error: 'Failed to update timetable' });
+  }
 });
 
 // Location finding API endpoint
@@ -496,6 +821,7 @@ const shutdown = () => {
   console.log('Shutting down...');
   server.close(() => {
     callRepo.close();
+    timetableRepo.close();
     process.exit(0);
   });
   setTimeout(() => process.exit(1), 10000);

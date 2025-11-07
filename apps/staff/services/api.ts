@@ -79,17 +79,26 @@ class ApiService {
         headers,
       });
 
-      // If token expired, try to refresh
-      if (response.status === 403 && token) {
+      // If token expired (401 or 403), try to refresh
+      if ((response.status === 401 || response.status === 403) && token) {
+        console.log('Token expired or invalid, attempting refresh...');
         const refreshed = await this.refreshAccessToken();
         if (refreshed) {
           // Retry request with new token
           const newToken = this.getToken();
-          headers['Authorization'] = `Bearer ${newToken}`;
-          response = await fetch(`${API_BASE_URL}${endpoint}`, {
-            ...options,
-            headers,
-          });
+          if (newToken) {
+            headers['Authorization'] = `Bearer ${newToken}`;
+            console.log('Retrying request with refreshed token');
+            response = await fetch(`${API_BASE_URL}${endpoint}`, {
+              ...options,
+              headers,
+            });
+          }
+        } else {
+          // Refresh failed, clear tokens and redirect to login
+          console.warn('Token refresh failed, clearing auth data');
+          localStorage.removeItem('token');
+          localStorage.removeItem('refreshToken');
         }
       }
 

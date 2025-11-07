@@ -31,9 +31,10 @@ export interface SemesterClass {
   subject: string;
   subjectCode?: string;
   courseName?: string;
-  classType?: "Theory" | "Lab" | "Free";
+  classType?: "Theory" | "Lab" | "Free" | "Busy";
   batch?: string;
   room?: string;
+  coordinator?: string;
   isFree?: boolean;
 }
 

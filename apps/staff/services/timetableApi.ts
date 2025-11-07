@@ -2,7 +2,9 @@
 // Determine API base URL - prefer env vars, otherwise use unified server
 const getApiBaseUrl = () => {
   if ((import.meta as any).env?.VITE_API_BASE_URL || (import.meta as any).env?.VITE_API_BASE) {
-    return `${(import.meta as any).env?.VITE_API_BASE_URL || (import.meta as any).env?.VITE_API_BASE}/api`;
+    const base = (import.meta as any).env?.VITE_API_BASE_URL || (import.meta as any).env?.VITE_API_BASE;
+    // If base already includes /api, don't add it again
+    return base.endsWith('/api') ? base : `${base}/api`;
   }
   // In development, always use the unified server on port 8080
   if (typeof window !== 'undefined') {
@@ -49,7 +51,7 @@ export interface SemesterClass {
   subject: string;
   subjectCode?: string;
   courseName?: string;
-  classType?: 'Theory' | 'Lab' | 'Free';
+  classType?: 'Theory' | 'Lab' | 'Free' | 'Busy';
   batch?: string;
   room?: string;
 }
@@ -70,13 +72,48 @@ class TimetableApiService {
   private getToken(): string | null {
     return localStorage.getItem('token') || localStorage.getItem('clara-jwt-token');
   }
+  
+  private async refreshToken(): Promise<boolean> {
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) {
+      return false;
+    }
+    
+    try {
+      const response = await fetch(`${API_BASE}/auth/refresh-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        if (data.token) {
+          localStorage.setItem('token', data.token);
+          if (data.refreshToken) {
+            localStorage.setItem('refreshToken', data.refreshToken);
+          }
+          return true;
+        }
+      }
+    } catch (error) {
+      console.error('Token refresh failed:', error);
+    }
+    return false;
+  }
 
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const token = this.getToken();
-    const headers: HeadersInit = {
+    let token = this.getToken();
+    
+    // If no token, don't make authenticated requests (will fail gracefully)
+    if (!token) {
+      console.warn('No authentication token found for timetable API request');
+    }
+    
+    let headers: HeadersInit = {
       'Content-Type': 'application/json',
       ...options.headers,
     };
@@ -85,10 +122,33 @@ class TimetableApiService {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE}${endpoint}`, {
+    let response = await fetch(`${API_BASE}${endpoint}`, {
       ...options,
       headers,
     });
+    
+    // If token expired (401 or 403), try to refresh
+    if ((response.status === 401 || response.status === 403) && token) {
+      console.log('Timetable API: Token expired, attempting refresh...');
+      const refreshed = await this.refreshToken();
+      if (refreshed) {
+        token = this.getToken();
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+          console.log('Timetable API: Retrying with refreshed token');
+          response = await fetch(`${API_BASE}${endpoint}`, {
+            ...options,
+            headers,
+          });
+        }
+      } else {
+        // Refresh failed, clear tokens
+        console.warn('Timetable API: Token refresh failed, clearing auth data');
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('clara-jwt-token');
+      }
+    }
 
     // Get content type first
     const contentType = response.headers.get('content-type') || '';
@@ -120,7 +180,16 @@ class TimetableApiService {
         }
       }
 
-      // For other error status codes
+      // For other error status codes (401, 403, 500, etc.)
+      if (response.status === 401 || response.status === 403) {
+        // Invalid token - clear it and throw a user-friendly error
+        localStorage.removeItem('token');
+        localStorage.removeItem('clara-jwt-token');
+        const error = new Error('Authentication failed. Please log in again.');
+        (error as any).status = response.status;
+        throw error;
+      }
+      
       if (isJson) {
         try {
           const errorData = await response.json();
@@ -129,16 +198,21 @@ class TimetableApiService {
           if (errorData.details) {
             (error as any).details = errorData.details;
           }
+          (error as any).status = response.status;
           throw error;
         } catch (e: any) {
           // If it's already an Error object, rethrow
           if (e instanceof Error) throw e;
-          throw new Error(`HTTP ${response.status}`);
+          const error = new Error(`HTTP ${response.status}`);
+          (error as any).status = response.status;
+          throw error;
         }
       } else {
         // Non-JSON error response
         const text = await response.text();
-        throw new Error(text || `Server returned non-JSON response. Status: ${response.status}`);
+        const error = new Error(text || `Server returned non-JSON response. Status: ${response.status}`);
+        (error as any).status = response.status;
+        throw error;
       }
     }
 
@@ -155,7 +229,7 @@ class TimetableApiService {
    * Get timetable for a specific faculty and semester
    */
   async getTimetable(facultyId: string, semester: string): Promise<TimetableResponse> {
-    return this.request<TimetableResponse>(`/api/timetables/${encodeURIComponent(facultyId)}/${encodeURIComponent(semester)}`);
+    return this.request<TimetableResponse>(`/timetables/${encodeURIComponent(facultyId)}/${encodeURIComponent(semester)}`);
   }
 
   /**
@@ -165,7 +239,7 @@ class TimetableApiService {
     facultyId: string,
     timetable: UpdateTimetableRequest
   ): Promise<{ success: boolean; timetable: TimetableResponse; message: string }> {
-    return this.request(`/api/timetables/${encodeURIComponent(facultyId)}`, {
+    return this.request(`/timetables/${encodeURIComponent(facultyId)}`, {
       method: 'PATCH',
       body: JSON.stringify(timetable),
     });
@@ -175,7 +249,7 @@ class TimetableApiService {
    * Get all timetables for a semester (admin only)
    */
   async getAllTimetablesForSemester(semester: string): Promise<TimetableResponse[]> {
-    return this.request<TimetableResponse[]>(`/api/timetables/semester/${encodeURIComponent(semester)}`);
+    return this.request<TimetableResponse[]>(`/timetables/semester/${encodeURIComponent(semester)}`);
   }
 }
 

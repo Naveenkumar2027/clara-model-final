@@ -1,5 +1,5 @@
 import React, { useState, createContext, useEffect } from 'react';
-import { StaffProfile, NavItem, TimetableEntry, Meeting, Group, ChatMessage } from '../types';
+import { StaffProfile, NavItem, TimetableEntry, Meeting, Group, ChatMessage, SemesterTimetable } from '../types';
 import { HOD_EMAIL } from '../constants';
 import Sidebar from './Sidebar';
 import DashboardHome from './DashboardHome';
@@ -53,12 +53,160 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
   const [incomingCall, setIncomingCall] = useState<CallIncomingEvent | null>(null);
   const [staffRTC, setStaffRTC] = useState<StaffRTC | null>(null);
   const [timetable, setTimetable] = useState<TimetableEntry[]>([]);
+  const [semesterTimetable, setSemesterTimetable] = useState<SemesterTimetable | null>(null);
+  const [selectedSemester, setSelectedSemester] = useState<string>(() => {
+    // Initialize from localStorage if available
+    return localStorage.getItem('selectedSemester') || "5th Semester";
+  });
+  
+  // Handler for semester change that also reloads timetable
+  const handleSemesterChange = (semester: string) => {
+    setSelectedSemester(semester);
+    // Save to localStorage for AI Assistant to sync
+    localStorage.setItem('selectedSemester', semester);
+    // Dispatch custom event for same-tab updates
+    window.dispatchEvent(new CustomEvent('semester:changed', {
+      detail: { semester }
+    }));
+    // The useEffect will automatically reload the timetable when selectedSemester changes
+  };
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeChatGroup, setActiveChatGroup] = useState<string | null>(null);
   const { addNotification } = useNotification();
 
   const isHod = user.email === HOD_EMAIL;
+
+  // Load current semester timetable for dashboard display
+  useEffect(() => {
+    if (!user) return;
+    
+    const loadSemesterTimetable = async () => {
+      try {
+        const facultyId = user.email?.split('@')[0] || user.id || user.email || '';
+        const normalizedFacultyId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
+        
+        // Try to load from localStorage first (fastest)
+        const getLocalStorageKey = (facultyId: string, semester: string): string => {
+          const normalizedId = facultyId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const normalizedSem = semester.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          return `timetable_${normalizedId}_${normalizedSem}`;
+        };
+        
+        const key = getLocalStorageKey(normalizedFacultyId, selectedSemester);
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          const data = JSON.parse(stored);
+          setSemesterTimetable(data);
+          return;
+        }
+        
+        // Try to load from API
+        try {
+          const { timetableApi } = await import('../services/timetableApi');
+          const apiData = await timetableApi.getTimetable(normalizedFacultyId, selectedSemester);
+          const convertedData: SemesterTimetable = {
+            faculty: apiData.faculty,
+            designation: apiData.designation,
+            semester: apiData.semester,
+            schedule: apiData.schedule,
+          };
+          setSemesterTimetable(convertedData);
+        } catch (apiError) {
+          // If API fails, keep null (will show empty state)
+          console.log('Could not load timetable from API for dashboard:', apiError);
+        }
+      } catch (error) {
+        console.error('Error loading semester timetable for dashboard:', error);
+      }
+    };
+    
+    loadSemesterTimetable();
+    
+    // Listen for timetable updates via localStorage changes
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key && e.key.startsWith('timetable_')) {
+        const facultyId = user.email?.split('@')[0] || user.id || user.email || '';
+        const normalizedFacultyId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
+        const key = `timetable_${normalizedFacultyId.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${selectedSemester.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+        if (e.key === key && e.newValue) {
+          try {
+            const data = JSON.parse(e.newValue);
+            setSemesterTimetable(data);
+          } catch (err) {
+            console.error('Error parsing updated timetable:', err);
+          }
+        }
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for custom events (for same-tab updates)
+    const handleTimetableUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && customEvent.detail.semester === selectedSemester) {
+        console.log('Dashboard received timetable update event:', customEvent.detail);
+        // Reload from localStorage to ensure consistency
+        const facultyId = user.email?.split('@')[0] || user.id || user.email || '';
+        const normalizedFacultyId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
+        const getLocalStorageKey = (facultyId: string, semester: string): string => {
+          const normalizedId = facultyId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          const normalizedSem = semester.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          return `timetable_${normalizedId}_${normalizedSem}`;
+        };
+        const key = getLocalStorageKey(normalizedFacultyId, selectedSemester);
+        const stored = localStorage.getItem(key);
+        if (stored) {
+          try {
+            const data = JSON.parse(stored);
+            console.log('Dashboard updating timetable from localStorage:', data);
+            setSemesterTimetable(data);
+          } catch (err) {
+            console.error('Error parsing updated timetable:', err);
+            // Fallback to event data
+            if (customEvent.detail.timetable) {
+              setSemesterTimetable(customEvent.detail.timetable);
+            }
+          }
+        } else {
+          // Use event data if localStorage not available
+          if (customEvent.detail.timetable) {
+            console.log('Dashboard updating timetable from event data:', customEvent.detail.timetable);
+            setSemesterTimetable(customEvent.detail.timetable);
+          }
+        }
+        
+        // Also try to reload from API to ensure we have the latest data
+        const reloadFromApi = async () => {
+          try {
+            const { timetableApi } = await import('../services/timetableApi');
+            const apiData = await timetableApi.getTimetable(normalizedFacultyId, selectedSemester);
+            const convertedData: SemesterTimetable = {
+              faculty: apiData.faculty,
+              designation: apiData.designation,
+              semester: apiData.semester,
+              schedule: apiData.schedule,
+            };
+            console.log('Dashboard reloaded timetable from API:', convertedData);
+            setSemesterTimetable(convertedData);
+          } catch (apiError) {
+            console.log('Could not reload from API, using cached data:', apiError);
+          }
+        };
+        
+        // Reload from API after a short delay to ensure DB has been updated
+        setTimeout(reloadFromApi, 500);
+      }
+    };
+    
+    window.addEventListener('timetable:updated', handleTimetableUpdate);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('timetable:updated', handleTimetableUpdate);
+    };
+  }, [user, selectedSemester]);
 
   useEffect(() => {
     if (user) {
@@ -196,7 +344,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
   const renderActiveComponent = () => {
     switch (activeView) {
       case 'Dashboard':
-        return <DashboardHome timetable={timetable} meetings={meetings} />;
+        return <DashboardHome 
+          timetable={timetable} 
+          meetings={meetings} 
+          semesterTimetable={semesterTimetable} 
+          selectedSemester={selectedSemester}
+          onSemesterChange={handleSemesterChange}
+        />;
       case 'Timetable':
         return <Timetable initialTimetable={timetable} onTimetableUpdate={handleTimetableUpdate} user={user} />;
       case 'Appointments':

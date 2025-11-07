@@ -789,14 +789,14 @@
   "classSchedule": {
     "timeSlots": [
       {"slot": 1, "time": "08:30-09:25"},
-      {"slot": 2, "time": "09:25-10:20", "type": "Coffee Break"},
-      {"slot": 3, "time": "10:20-10:40"},
+      {"slot": 2, "time": "09:25-10:20"},
+      {"slot": 3, "time": "10:20-10:40", "type": "Coffee Break"},
       {"slot": 4, "time": "10:40-11:35"},
       {"slot": 5, "time": "11:35-12:30"},
       {"slot": 6, "time": "12:30-01:15", "type": "Lunch Break"},
       {"slot": 7, "time": "01:15-02:10"},
       {"slot": 8, "time": "02:10-03:05"},
-      {"slot": 9, "time": "03:05-04:00"}
+      {"slot": 9, "time": "03:05-04:10"}
     ]
   }
 }

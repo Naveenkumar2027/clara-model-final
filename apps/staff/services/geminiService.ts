@@ -11,6 +11,7 @@ export const createLiveSession = (callbacks: {
     onmessage: (message: LiveServerMessage) => void;
     onerror: (e: ErrorEvent) => void;
     onclose: (e: CloseEvent) => void;
+    onTimetableUpdateRequest?: (command: { day: string; timeSlot: string; action: 'mark_busy' | 'mark_free' }) => void;
 }): Promise<LiveSession> => {
     return ai.live.connect({
         model: 'gemini-2.5-flash-native-audio-preview-09-2025',
@@ -20,7 +21,26 @@ export const createLiveSession = (callbacks: {
             speechConfig: {
                 voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } },
             },
-            systemInstruction: 'You are a friendly and helpful AI assistant for the staff of Sai Vidya Institute of Technology. Keep your responses concise and professional.',
+            systemInstruction: `You are a friendly and helpful AI assistant for the staff of Sai Vidya Institute of Technology. 
+
+IMPORTANT: Only respond to clear, meaningful questions or commands. Do NOT respond to:
+- Background noise
+- Single characters or punctuation (like ".", "!", etc.)
+- Filler words like "um", "uh", "ok", "ठीक" when said alone
+- Ambiguous sounds or unclear speech
+- Very short inputs (less than 3-4 words)
+
+You have the ability to update the staff member's timetable. When a staff member mentions being busy or free at a specific time, you should:
+1. Acknowledge their request
+2. Confirm the day and time slot
+3. Inform them that you will update their timetable
+
+Common phrases to recognize:
+- "I am busy at 2pm today" -> mark busy for today at 2pm slot
+- "I'm free tomorrow at 10am" -> mark free for tomorrow at 10am slot
+- "Mark me busy on Monday at 3pm" -> mark busy for Monday at 3pm slot
+
+Always confirm before making changes. Keep your responses concise and professional. Only speak when the user has asked a clear question or given a clear command.`,
             outputAudioTranscription: {},
             inputAudioTranscription: {},
         },

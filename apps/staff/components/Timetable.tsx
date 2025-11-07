@@ -18,10 +18,10 @@ const getTimeSlots = (): string[] => {
     } catch (e) {
         console.warn('Could not load time slots from JSON, using defaults');
     }
-    // Default time slots
+    // Default time slots - matching the official timetable format
     return [
         "08:30-09:25", "09:25-10:20", "10:20-10:40", "10:40-11:35", "11:35-12:30",
-        "12:30-13:25", "13:25-14:10", "14:10-15:05", "15:05-16:00"
+        "12:30-01:15", "01:15-02:10", "02:10-03:05", "03:05-04:10"
     ];
 };
 
@@ -38,25 +38,55 @@ const SEMESTER_OPTIONS = [
   "8th Semester"
 ];
 
+// Helper functions for localStorage persistence
+const getLocalStorageKey = (facultyId: string, semester: string): string => {
+  const normalizedId = facultyId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  const normalizedSem = semester.toLowerCase().replace(/[^a-z0-9]/g, '_');
+  return `timetable_${normalizedId}_${normalizedSem}`;
+};
+
+const saveToLocalStorage = (facultyId: string, semester: string, data: SemesterTimetable): void => {
+  try {
+    const key = getLocalStorageKey(facultyId, semester);
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch (e) {
+    console.warn('Failed to save timetable to localStorage:', e);
+  }
+};
+
+const loadFromLocalStorage = (facultyId: string, semester: string): SemesterTimetable | null => {
+  try {
+    const key = getLocalStorageKey(facultyId, semester);
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.warn('Failed to load timetable from localStorage:', e);
+  }
+  return null;
+};
+
 // Dr. Dhivyasri G's 5th Semester timetable data
+// This data matches the exact structure from the official timetable document
 const DHIVYASRI_5TH_SEMESTER: SemesterTimetable = {
-  faculty: "Dr. G Dhivyasri",
+  faculty: "Dr. Dhivyasri G",
   designation: "Associate Professor",
-  semester: "5th Semester – Odd 2025-2026",
+  semester: "5th Semester", // Maps to "Odd 2025-2026" in display
   schedule: {
     Monday: [
       { 
         time: "08:30-09:25", 
-        subject: "BCS502 Computer Networks (5th B)", 
-        subjectCode: "BCS502", 
+        subject: "CN (5th B)", 
+        subjectCode: "CN", 
         courseName: "Computer Networks",
         classType: "Theory", 
         batch: "5th B" 
       },
       { 
         time: "10:40-11:35", 
-        subject: "BCS502 Computer Networks (5th A)", 
-        subjectCode: "BCS502", 
+        subject: "CN (5th A)", 
+        subjectCode: "CN", 
         courseName: "Computer Networks",
         classType: "Theory", 
         batch: "5th A" 
@@ -65,16 +95,16 @@ const DHIVYASRI_5TH_SEMESTER: SemesterTimetable = {
     Tuesday: [
       { 
         time: "08:30-09:25", 
-        subject: "BCS502 Computer Networks (5th A)", 
-        subjectCode: "BCS502", 
+        subject: "CN (5th A)", 
+        subjectCode: "CN", 
         courseName: "Computer Networks",
         classType: "Theory", 
         batch: "5th A" 
       },
       { 
-        time: "10:40-12:30", 
-        subject: "BCS502 Computer Networks Lab (5th A)", 
-        subjectCode: "BCS502", 
+        time: "11:35-12:30", 
+        subject: "CN Lab (5th A)", 
+        subjectCode: "CN", 
         courseName: "Computer Networks Lab",
         classType: "Lab", 
         batch: "5th A" 
@@ -83,39 +113,63 @@ const DHIVYASRI_5TH_SEMESTER: SemesterTimetable = {
     Wednesday: [
       { 
         time: "09:25-10:20", 
-        subject: "BCS502 Computer Networks (5th A)", 
-        subjectCode: "BCS502", 
+        subject: "CN (5th A)", 
+        subjectCode: "CN", 
         courseName: "Computer Networks",
         classType: "Theory", 
         batch: "5th A" 
+      },
+      { 
+        time: "11:35-12:30", 
+        subject: "CN (5th B)", 
+        subjectCode: "CN", 
+        courseName: "Computer Networks",
+        classType: "Theory", 
+        batch: "5th B" 
       },
     ],
     Thursday: [
       { 
         time: "09:25-10:20", 
-        subject: "BCS502 Computer Networks (5th A)", 
-        subjectCode: "BCS502", 
+        subject: "CN (5th A)", 
+        subjectCode: "CN", 
         courseName: "Computer Networks",
         classType: "Theory", 
         batch: "5th A" 
       },
       { 
-        time: "10:40-12:30", 
-        subject: "BCS502 Computer Networks Lab (5th B)", 
-        subjectCode: "BCS502", 
+        time: "11:35-12:30", 
+        subject: "CN Lab (5th B)", 
+        subjectCode: "CN", 
         courseName: "Computer Networks Lab",
         classType: "Lab", 
+        batch: "5th B" 
+      },
+      { 
+        time: "01:15-02:10", 
+        subject: "CN (5th B)", 
+        subjectCode: "CN", 
+        courseName: "Computer Networks",
+        classType: "Theory", 
         batch: "5th B" 
       },
     ],
     Friday: [
       { 
-        time: "08:30-10:20", 
-        subject: "BAIL504 Data Visualization Lab (5th A)", 
-        subjectCode: "BAIL504", 
+        time: "09:25-10:20", 
+        subject: "DV Lab (5th A)", 
+        subjectCode: "DV", 
         courseName: "Data Visualization Lab",
         classType: "Lab", 
         batch: "5th A" 
+      },
+      { 
+        time: "01:15-02:10", 
+        subject: "CN (5th B)", 
+        subjectCode: "CN", 
+        courseName: "Computer Networks",
+        classType: "Theory", 
+        batch: "5th B" 
       },
     ],
   },
@@ -140,7 +194,7 @@ const calculateWorkload = (schedule: SemesterTimetable['schedule']) => {
       } else if (cls.classType === "Lab") {
         labHours += duration;
       }
-      // "Free" classType doesn't count towards workload
+      // "Free" and "Busy" classTypes don't count towards workload
     });
   });
 
@@ -168,8 +222,8 @@ const isBreakTime = (time: string): boolean => {
       .map(slot => slot.time);
     return breakSlots.includes(time);
   } catch (e) {
-    // Fallback to hardcoded break times
-    return time === "10:20-10:40" || time === "12:30-13:25" || time === "09:25-10:20";
+    // Fallback to hardcoded break times - matching the official timetable
+    return time === "10:20-10:40" || time === "12:30-01:15";
   }
 };
 
@@ -211,17 +265,26 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
         setTimetable(initialTimetable);
     }, [initialTimetable]);
 
-    // Load timetable from API or JSON data
+    // Load timetable from API, localStorage, or JSON data
     useEffect(() => {
         if (!user || !facultyId) return;
         
         const loadTimetable = async () => {
+            // Immediately clear previous semester data when switching to show blank grid
+            setSemesterData(null);
+            setEditableSemesterData(null);
+            setIsEditing(false);
+            setEditingCell(null);
+            setValidationErrors([]);
+            
+            // Show loading only briefly, then show empty grid if no data
             setIsLoading(true);
+            
             try {
                 // Normalize facultyId - use email prefix (before @) or id directly
                 const normalizedFacultyId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
                 
-                // Try to load from API first
+                // Try to load from API first (primary source)
                 try {
                     const apiData = await timetableApi.getTimetable(normalizedFacultyId, selectedSemester);
                     
@@ -229,143 +292,392 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                     const convertedData: SemesterTimetable = {
                         faculty: apiData.faculty,
                         designation: apiData.designation,
-                        semester: apiData.semester,
+                        semester: selectedSemester, // Always use selectedSemester for consistency
                         schedule: apiData.schedule,
                     };
                     
                     setSemesterData(convertedData);
                     setEditableSemesterData(JSON.parse(JSON.stringify(convertedData)));
+                    
+                    // Save to localStorage as backup
+                    saveToLocalStorage(normalizedFacultyId, selectedSemester, convertedData);
                     return;
                 } catch (apiError: any) {
-                    // If API fails, try loading from JSON data
-                    console.log('API load failed, trying JSON data:', apiError.message);
-                }
-                
-                // Try to load from JSON faculty timetable data
-                let jsonTimetable: SemesterTimetable | null = null;
-                
-                // Try to find faculty by email or name
-                if (user.email) {
-                    const facultyByEmail = getFacultyByEmail(user.email);
-                    if (facultyByEmail) {
-                        jsonTimetable = getFacultyTimetable(facultyByEmail.id, selectedSemester);
-                    }
-                }
-                
-                // If not found by email, try by name
-                if (!jsonTimetable && user.name) {
-                    const facultyByName = getFacultyByName(user.name);
-                    if (facultyByName) {
-                        jsonTimetable = getFacultyTimetable(facultyByName.id, selectedSemester);
-                    }
-                }
-                
-                // Fallback to specific faculty checks (e.g., Dr. Dhivyasri G)
-                if (!jsonTimetable) {
-                    if (user.email?.toLowerCase() === 'gdhivyasri@gmail.com' || 
-                        user.name?.toLowerCase().includes('dhivyasri')) {
-                        jsonTimetable = getFacultyTimetable('FAC013', selectedSemester);
-                    } else if (user.name?.toLowerCase().includes('nagashree') || 
-                               user.email?.toLowerCase().includes('nagashree')) {
-                        jsonTimetable = getFacultyTimetable('FAC005', selectedSemester);
-                    }
-                }
-                
-                if (jsonTimetable) {
-                    setSemesterData(jsonTimetable);
-                    setEditableSemesterData(JSON.parse(JSON.stringify(jsonTimetable)));
+                    // If API fails (404 or other), try localStorage
+                    console.log('API load failed, trying localStorage:', apiError.message);
                     
-                    // Auto-save to database
-                    try {
-                        const workload = calculateWorkload(jsonTimetable.schedule);
-                        await timetableApi.updateTimetable(normalizedFacultyId, {
-                            faculty: jsonTimetable.faculty,
-                            designation: jsonTimetable.designation,
-                            semester: jsonTimetable.semester,
-                            schedule: jsonTimetable.schedule as any,
+                    const localData = loadFromLocalStorage(normalizedFacultyId, selectedSemester);
+                    if (localData) {
+                        console.log('Loaded timetable from localStorage');
+                        setSemesterData(localData);
+                        setEditableSemesterData(JSON.parse(JSON.stringify(localData)));
+                        return;
+                    }
+                    
+                    // If no data found in API or localStorage, check for default data for Dr. Dhivyasri G
+                    // Only load default data for Dr. Dhivyasri G's 5th Semester
+                    const userEmail = user?.email?.toLowerCase() || '';
+                    const userName = user?.name?.toLowerCase() || '';
+                    const userId = normalizedFacultyId.toLowerCase();
+                    
+                    // Check if this is Dr. Dhivyasri G (multiple ways to identify)
+                    // Note: User might be logged in as "gdivyashree" or "gdhivyasri" - both should work
+                    const isDhivyasri = selectedSemester === "5th Semester" && (
+                        userEmail === 'gdhivyasri@gmail.com' ||
+                        userEmail === 'gdivyashree@gmail.com' ||
+                        userEmail.includes('dhivyasri') ||
+                        userEmail.includes('divyashree') ||
+                        userName.includes('dhivyasri') ||
+                        userName.includes('divyashree') ||
+                        userId.includes('dhivyasri') ||
+                        userId.includes('divyashree') ||
+                        userId === 'gdhivyasri' ||
+                        userId === 'gdivyashree' ||
+                        userId === 'dhivyasri' ||
+                        userId === 'divyashree'
+                    );
+                    
+                    if (isDhivyasri) {
+                        console.log('Loading default 5th semester data for Dr. Dhivyasri G', { userEmail, userName, userId });
+                        // Load default 5th semester data for Dr. Dhivyasri G
+                        const defaultData = { ...DHIVYASRI_5TH_SEMESTER };
+                        defaultData.semester = selectedSemester; // Ensure semester matches
+                        
+                        setSemesterData(defaultData);
+                        setEditableSemesterData(JSON.parse(JSON.stringify(defaultData)));
+                        
+                        // Auto-save to database and localStorage
+                        try {
+                            const workload = calculateWorkload(defaultData.schedule);
+                            await timetableApi.updateTimetable(normalizedFacultyId, {
+                                faculty: defaultData.faculty,
+                                designation: defaultData.designation,
+                                semester: selectedSemester,
+                                schedule: defaultData.schedule as any,
+                                workload: {
+                                    theory: workload.theory,
+                                    lab: workload.lab,
+                                    totalUnits: workload.total,
+                                },
+                            });
+                            // Save to localStorage
+                            saveToLocalStorage(normalizedFacultyId, selectedSemester, defaultData);
+                            console.log('Default 5th semester timetable loaded and saved for Dr. Dhivyasri G');
+                        } catch (saveError) {
+                            console.warn('Failed to auto-save default timetable to database:', saveError);
+                            // Still save to localStorage even if DB save fails
+                            saveToLocalStorage(normalizedFacultyId, selectedSemester, defaultData);
+                        }
+                        return;
+                    } else {
+                        console.log('Not Dr. Dhivyasri G or not 5th semester', { selectedSemester, userEmail, userName, userId });
+                    }
+                    
+                    // For other cases, show blank grid
+                    console.log('No saved data found for this semester - showing blank timetable');
+                    setSemesterData(null);
+                    setEditableSemesterData(null);
+                    return;
+                }
+            } catch (error: any) {
+                console.error('Error loading timetable:', error);
+                
+                // Try localStorage as last resort
+                const normalizedFacultyId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
+                const localData = loadFromLocalStorage(normalizedFacultyId, selectedSemester);
+                if (localData) {
+                    setSemesterData(localData);
+                    setEditableSemesterData(JSON.parse(JSON.stringify(localData)));
+                } else {
+                    // Check for default data for Dr. Dhivyasri G if no localStorage data
+                    const userEmail = user?.email?.toLowerCase() || '';
+                    const userName = user?.name?.toLowerCase() || '';
+                    const userId = normalizedFacultyId.toLowerCase();
+                    
+                    // Check if this is Dr. Dhivyasri G (multiple ways to identify)
+                    // Note: User might be logged in as "gdivyashree" or "gdhivyasri" - both should work
+                    const isDhivyasri = selectedSemester === "5th Semester" && (
+                        userEmail === 'gdhivyasri@gmail.com' ||
+                        userEmail === 'gdivyashree@gmail.com' ||
+                        userEmail.includes('dhivyasri') ||
+                        userEmail.includes('divyashree') ||
+                        userName.includes('dhivyasri') ||
+                        userName.includes('divyashree') ||
+                        userId.includes('dhivyasri') ||
+                        userId.includes('divyashree') ||
+                        userId === 'gdhivyasri' ||
+                        userId === 'gdivyashree' ||
+                        userId === 'dhivyasri' ||
+                        userId === 'divyashree'
+                    );
+                    
+                    if (isDhivyasri) {
+                        console.log('Loading default 5th semester data for Dr. Dhivyasri G (from error handler)', { userEmail, userName, userId });
+                        const defaultData = { ...DHIVYASRI_5TH_SEMESTER };
+                        defaultData.semester = selectedSemester;
+                        
+                        setSemesterData(defaultData);
+                        setEditableSemesterData(JSON.parse(JSON.stringify(defaultData)));
+                        
+                        // Try to save to database and localStorage
+                        const workload = calculateWorkload(defaultData.schedule);
+                        timetableApi.updateTimetable(normalizedFacultyId, {
+                            faculty: defaultData.faculty,
+                            designation: defaultData.designation,
+                            semester: selectedSemester,
+                            schedule: defaultData.schedule as any,
                             workload: {
                                 theory: workload.theory,
                                 lab: workload.lab,
                                 totalUnits: workload.total,
                             },
+                        }).then(() => {
+                            saveToLocalStorage(normalizedFacultyId, selectedSemester, defaultData);
+                            console.log('Default timetable saved successfully');
+                        }).catch((saveError) => {
+                            console.warn('Failed to save default timetable:', saveError);
+                            saveToLocalStorage(normalizedFacultyId, selectedSemester, defaultData);
                         });
-                    } catch (saveError) {
-                        console.warn('Failed to auto-save timetable to database:', saveError);
+                    } else {
+                        // No data found - ensure blank state
+                        setSemesterData(null);
+                        setEditableSemesterData(null);
+                        
+                        // Only show error for actual server errors, not for "not found"
+                        if (error.message?.includes('non-JSON') || error.message?.includes('<!DOCTYPE')) {
+                            setToastMessage('Server error: Please check if the backend server is running');
+                            setToastType('error');
+                            setShowToast(true);
+                            setTimeout(() => setShowToast(false), 5000);
+                        }
+                        // For "not found" errors, silently show blank grid (this is expected behavior)
                     }
-                } else {
-                    // No data found - show empty state
-                    setSemesterData(null);
-                    setEditableSemesterData(null);
                 }
-            } catch (error: any) {
-                console.error('Error loading timetable:', error);
-                
-                if (error.message?.includes('non-JSON') || error.message?.includes('<!DOCTYPE')) {
-                    setToastMessage('Server error: Please check if the backend server is running');
-                } else {
-                    setToastMessage(error.message || 'Failed to load timetable');
-                }
-                setToastType('error');
-                setShowToast(true);
-                setTimeout(() => setShowToast(false), 5000);
             } finally {
                 setIsLoading(false);
             }
         };
 
         loadTimetable();
-        setIsEditing(false);
-        setEditingCell(null);
     }, [selectedSemester, facultyId, user]);
     
-    // Real-time sync via Socket.IO
+    // Listen for custom timetable:updated events (from AI Assistant, etc.)
+    useEffect(() => {
+        if (!user || !facultyId) return;
+        
+        const normalizedFacultyId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
+        const normalizedId = normalizedFacultyId.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const storageKeyPrefix = `timetable_${normalizedId}_${selectedSemester.toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+        
+        const reloadTimetable = async () => {
+            console.log('🔄 Reloading timetable from API/localStorage...');
+            try {
+                // First try localStorage (faster)
+                const localData = loadFromLocalStorage(normalizedFacultyId, selectedSemester);
+                if (localData) {
+                    console.log('📦 Loading from localStorage:', localData);
+                    setSemesterData(localData);
+                    setEditableSemesterData(JSON.parse(JSON.stringify(localData)));
+                }
+                
+                // Then try API (more reliable, might have newer data)
+                try {
+                    const apiData = await timetableApi.getTimetable(normalizedFacultyId, selectedSemester);
+                    const convertedData: SemesterTimetable = {
+                        faculty: apiData.faculty,
+                        designation: apiData.designation,
+                        semester: selectedSemester,
+                        schedule: apiData.schedule,
+                    };
+                    console.log('📡 Loading from API:', convertedData);
+                    setSemesterData(convertedData);
+                    setEditableSemesterData(JSON.parse(JSON.stringify(convertedData)));
+                    saveToLocalStorage(normalizedFacultyId, selectedSemester, convertedData);
+                    console.log('✅ Timetable reloaded successfully');
+                } catch (apiError) {
+                    console.warn('⚠️ Could not reload from API, using localStorage data:', apiError);
+                    // Keep localStorage data if API fails
+                }
+            } catch (error) {
+                console.error('❌ Error reloading timetable:', error);
+            }
+        };
+        
+        const handleTimetableUpdate = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            console.log('📢 Timetable component received update event:', customEvent.detail);
+            
+            if (customEvent.detail && customEvent.detail.semester === selectedSemester) {
+                const updateFacultyId = customEvent.detail.facultyId?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+                
+                console.log('🔍 Comparing faculty IDs:', {
+                    updateFacultyId,
+                    currentFacultyId: normalizedId,
+                    match: updateFacultyId === normalizedId
+                });
+                
+                if (updateFacultyId === normalizedId || !updateFacultyId) {
+                    console.log('✅ Faculty ID matches, reloading timetable...');
+                    // Small delay to ensure DB/localStorage has been updated
+                    setTimeout(reloadTimetable, 300);
+                } else {
+                    console.log('⚠️ Faculty ID mismatch, ignoring update');
+                }
+            } else {
+                console.log('⚠️ Semester mismatch or missing detail:', {
+                    eventSemester: customEvent.detail?.semester,
+                    currentSemester: selectedSemester
+                });
+            }
+        };
+        
+        const handleStorageChange = (e: StorageEvent | Event) => {
+            // Handle both real StorageEvent and custom storage events
+            const key = (e as StorageEvent).key || (e as CustomEvent).detail?.key;
+            const newValue = (e as StorageEvent).newValue || (e as CustomEvent).detail?.newValue;
+            
+            if (key && key === storageKeyPrefix && newValue) {
+                console.log('📦 Storage event detected for timetable update:', key);
+                try {
+                    const data = JSON.parse(newValue);
+                    console.log('📦 Loading updated timetable from storage:', data);
+                    setSemesterData(data);
+                    setEditableSemesterData(JSON.parse(JSON.stringify(data)));
+                    console.log('✅ Timetable updated from storage event');
+                } catch (err) {
+                    console.error('❌ Error parsing storage event data:', err);
+                }
+            }
+        };
+        
+        const handleForceUpdate = (e: Event) => {
+            const customEvent = e as CustomEvent;
+            console.log('🔄 Force update event received:', customEvent.detail);
+            
+            if (customEvent.detail) {
+                const updateFacultyId = customEvent.detail.facultyId?.toLowerCase().replace(/[^a-z0-9]/g, '') || '';
+                const eventSemester = customEvent.detail.semester;
+                
+                console.log('🔍 Force update check:', {
+                    updateFacultyId,
+                    currentFacultyId: normalizedId,
+                    eventSemester,
+                    currentSemester: selectedSemester,
+                    hasSchedule: !!customEvent.detail.schedule
+                });
+                
+                if ((updateFacultyId === normalizedId || !updateFacultyId) && eventSemester === selectedSemester) {
+                    console.log('✅ Force update matches, updating timetable immediately...');
+                    if (customEvent.detail.schedule) {
+                        // Use schedule from event if available (faster, no API call needed)
+                        // Get current faculty/designation from existing data or user
+                        const currentData = semesterData;
+                        const updatedData: SemesterTimetable = {
+                            faculty: user?.name || currentData?.faculty || 'Unknown',
+                            designation: user?.department || currentData?.designation || '',
+                            semester: selectedSemester,
+                            schedule: customEvent.detail.schedule,
+                        };
+                        console.log('📝 Setting new timetable data:', updatedData);
+                        setSemesterData(updatedData);
+                        setEditableSemesterData(JSON.parse(JSON.stringify(updatedData)));
+                        saveToLocalStorage(normalizedFacultyId, selectedSemester, updatedData);
+                        console.log('✅ Timetable force-updated from event schedule');
+                    } else {
+                        // Fallback to reload from API/localStorage
+                        console.log('⚠️ No schedule in event, reloading from API/localStorage');
+                        reloadTimetable();
+                    }
+                } else {
+                    console.log('⚠️ Force update mismatch:', {
+                        facultyMatch: updateFacultyId === normalizedId,
+                        semesterMatch: eventSemester === selectedSemester
+                    });
+                }
+            }
+        };
+        
+        window.addEventListener('timetable:updated', handleTimetableUpdate);
+        window.addEventListener('storage', handleStorageChange as EventListener);
+        window.addEventListener('timetable:force-update', handleForceUpdate);
+        
+        return () => {
+            window.removeEventListener('timetable:updated', handleTimetableUpdate);
+            window.removeEventListener('storage', handleStorageChange as EventListener);
+            window.removeEventListener('timetable:force-update', handleForceUpdate);
+        };
+    }, [user, facultyId, selectedSemester]);
+
+    // Real-time sync via Socket.IO (optional - gracefully handle connection failures)
     useEffect(() => {
         if (!user) return;
         
         const token = localStorage.getItem('token') || localStorage.getItem('clara-jwt-token');
-        if (!token) return;
+        if (!token) {
+          console.log('No token found for Socket.IO connection - using custom events only');
+          return;
+        }
         
-        const API_BASE = (import.meta as any).env?.VITE_API_BASE || 
-          (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
-        const SOCKET_PATH = (import.meta as any).env?.VITE_SOCKET_PATH || '/socket';
-        const socketUrl = API_BASE.replace(/\/api$/, '');
-        
-        socketRef.current = io(`${socketUrl}/rtc`, {
-          path: SOCKET_PATH,
-          auth: { token },
-        });
-        
-        const socket = socketRef.current;
-        
-        socket.on('connect', () => {
-          console.log('Timetable socket connected for real-time updates');
-        });
-        
-        // Listen for timetable updates
-        socket.on('timetable:updated', (data: { facultyId: string; semester: string; timetable: TimetableResponse }) => {
-          // Only update if it's for the current faculty and semester
-          if (data.facultyId.toLowerCase() === facultyId.toLowerCase() && 
-              data.semester === selectedSemester) {
-            const convertedData: SemesterTimetable = {
-              faculty: data.timetable.faculty,
-              designation: data.timetable.designation,
-              semester: data.timetable.semester,
-              schedule: data.timetable.schedule,
-            };
+        try {
+          const API_BASE = (import.meta as any).env?.VITE_API_BASE || 
+            (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
+          const SOCKET_PATH = (import.meta as any).env?.VITE_SOCKET_PATH || '/socket';
+          const socketUrl = API_BASE.replace(/\/api$/, '');
+          
+          socketRef.current = io(`${socketUrl}/rtc`, {
+            path: SOCKET_PATH,
+            auth: { token },
+            reconnection: true,
+            reconnectionAttempts: 3,
+            reconnectionDelay: 1000,
+          });
+          
+          const socket = socketRef.current;
+          
+          socket.on('connect', () => {
+            console.log('Timetable socket connected for real-time updates');
+          });
+          
+          socket.on('connect_error', (error: any) => {
+            console.warn('Socket.IO connection error (will use custom events instead):', error.message);
+            // Don't show error to user - custom events will handle updates
+          });
+          
+          // Listen for timetable updates
+          socket.on('timetable:updated', (data: { facultyId: string; semester: string; timetable: TimetableResponse }) => {
+            // Normalize facultyId for comparison
+            const normalizedCurrentId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
+            const normalizedUpdateId = data.facultyId.includes('@') ? data.facultyId.split('@')[0] : data.facultyId;
             
-            // Only update if not currently editing
-            if (!isEditing) {
-              setSemesterData(convertedData);
-              setEditableSemesterData(JSON.parse(JSON.stringify(convertedData)));
+            // Only update if it's for the current faculty and semester
+            if (normalizedUpdateId.toLowerCase() === normalizedCurrentId.toLowerCase() && 
+                data.semester === selectedSemester) {
+              const convertedData: SemesterTimetable = {
+                faculty: data.timetable.faculty,
+                designation: data.timetable.designation,
+                semester: selectedSemester, // Always use selectedSemester for consistency
+                schedule: data.timetable.schedule,
+              };
+              
+              // Only update if not currently editing
+              if (!isEditing) {
+                setSemesterData(convertedData);
+                setEditableSemesterData(JSON.parse(JSON.stringify(convertedData)));
+                
+                // Update localStorage
+                saveToLocalStorage(normalizedCurrentId, selectedSemester, convertedData);
+              }
             }
-          }
-        });
-        
-        return () => {
-          if (socket) {
-            socket.disconnect();
-          }
-        };
+          });
+          
+          return () => {
+            if (socket) {
+              socket.disconnect();
+            }
+          };
+        } catch (error) {
+          console.warn('Failed to initialize Socket.IO (will use custom events instead):', error);
+        }
     }, [user, facultyId, selectedSemester, isEditing]);
 
     // Convert semester data to timetable entries for display
@@ -403,7 +715,8 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
     };
 
     // Use editable data when editing, otherwise use original data
-    const displayData = isEditing && editableSemesterData ? editableSemesterData : semesterData;
+    // Always show grid, even if no data exists (empty timetable)
+    const displayData = isEditing && editableSemesterData ? editableSemesterData : (semesterData || null);
     const timetableEntries = getTimetableEntries(displayData);
     const workload = displayData ? calculateWorkload(displayData.schedule) : null;
 
@@ -426,11 +739,11 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
             // Ensure faculty name is set
             const facultyName = editableSemesterData.faculty || user?.name || 'Faculty';
             
-            // Prepare data for API
+            // Prepare data for API - always use selectedSemester to ensure consistency
             const updateData = {
                 faculty: facultyName,
-                designation: editableSemesterData.designation || user?.name || '',
-                semester: editableSemesterData.semester || selectedSemester,
+                designation: editableSemesterData.designation || '',
+                semester: selectedSemester, // Always use selectedSemester, not editableSemesterData.semester
                 schedule: editableSemesterData.schedule,
                 workload: {
                     theory: workload.theory,
@@ -443,24 +756,53 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
             const normalizedFacultyId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
             const response = await timetableApi.updateTimetable(normalizedFacultyId, updateData);
             
-            // Update local state with response
+            // Update local state with response - ensure semester matches selectedSemester
             const convertedData: SemesterTimetable = {
                 faculty: response.timetable.faculty,
                 designation: response.timetable.designation,
-                semester: response.timetable.semester,
+                semester: selectedSemester, // Always use selectedSemester for consistency
                 schedule: response.timetable.schedule,
             };
             
             setSemesterData(convertedData);
             setEditableSemesterData(JSON.parse(JSON.stringify(convertedData)));
-            setIsEditing(false);
+        setIsEditing(false);
             setEditingCell(null);
+            
+            // Save to localStorage as backup
+            saveToLocalStorage(normalizedFacultyId, selectedSemester, convertedData);
+            
+            // Dispatch custom event to notify dashboard of update
+            if (typeof window !== 'undefined') {
+                const event = new CustomEvent('timetable:updated', {
+                    detail: {
+                        semester: selectedSemester,
+                        timetable: convertedData,
+                        facultyId: normalizedFacultyId
+                    }
+                });
+                console.log('Dispatching timetable:updated event:', event.detail);
+                window.dispatchEvent(event);
+                
+                // Also trigger a storage event manually for cross-tab sync
+                const key = getLocalStorageKey(normalizedFacultyId, selectedSemester);
+                const storedValue = localStorage.getItem(key);
+                if (storedValue) {
+                    // Trigger storage event for other tabs
+                    window.dispatchEvent(new StorageEvent('storage', {
+                        key,
+                        newValue: storedValue,
+                        oldValue: storedValue,
+                        storageArea: localStorage
+                    }));
+                }
+            }
             
             // Show success toast
             setToastMessage('✅ Changes saved successfully');
             setToastType('success');
-            setShowToast(true);
-            setTimeout(() => setShowToast(false), 3000);
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 3000);
             
             // Trigger refresh in parent component if needed
             if (onTimetableUpdate) {
@@ -468,6 +810,19 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
             }
         } catch (error: any) {
             console.error('Error saving timetable:', error);
+            
+            // Handle authentication errors
+            if (error.status === 401 || error.status === 403 || error.message?.includes('Authentication failed')) {
+                setValidationErrors([]);
+                setToastMessage('Authentication failed. Please log in again.');
+                setToastType('error');
+                setShowToast(true);
+                setTimeout(() => setShowToast(false), 5000);
+                // Optionally redirect to login or refresh the page
+                // window.location.href = '/login';
+                setIsSaving(false);
+                return;
+            }
             
             // Check for validation errors
             if (error.response?.data?.details || error.details) {
@@ -509,7 +864,7 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
             updatedData = {
                 faculty: user?.name || 'Faculty',
                 designation: '',
-                semester: selectedSemester,
+                semester: selectedSemester, // Always use selectedSemester
                 schedule: {}
             };
         } else {
@@ -625,7 +980,7 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
         <div className="p-4 md:p-6 bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-white/10 text-white h-full flex flex-col">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
                 <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-                    <h2 className="text-xl font-bold">My Weekly Timetable</h2>
+                <h2 className="text-xl font-bold">My Weekly Timetable</h2>
                     {canEdit && (
                         <div className="flex items-center gap-2">
                             <label className="text-sm text-slate-300">Select Semester:</label>
@@ -655,7 +1010,19 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                 <div className="flex space-x-3">
                     {canEditTimetable && !isEditing && (
                         <button 
-                            onClick={() => setIsEditing(true)} 
+                            onClick={() => {
+                                // If no timetable exists, create an empty one for editing
+                                if (!editableSemesterData) {
+                                    const emptyTimetable: SemesterTimetable = {
+                                        faculty: user?.name || 'Faculty',
+                                        designation: '',
+                                        semester: selectedSemester,
+                                        schedule: {}
+                                    };
+                                    setEditableSemesterData(emptyTimetable);
+                                }
+                                setIsEditing(true);
+                            }} 
                             disabled={isLoading}
                             className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Edit Timetable"
@@ -678,7 +1045,7 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                                     </>
                                 ) : (
                                     <>
-                                        <i className="fa-solid fa-save"></i>
+                            <i className="fa-solid fa-save"></i>
                                         <span>Save Changes</span>
                                     </>
                                 )}
@@ -690,18 +1057,20 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                             >
                                 <i className="fa-solid fa-times"></i>
                                 <span>Cancel</span>
-                            </button>
+                        </button>
                         </>
                     )}
                 </div>
             </div>
 
-            {semesterData && (
+            {(semesterData || (editableSemesterData && isEditing)) && (
                 <div className="mb-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                    <p className="text-lg font-bold text-white">{semesterData.faculty}</p>
-                    {semesterData.designation && (
+                    <p className="text-lg font-bold text-white">
+                        {(semesterData || editableSemesterData)?.faculty || user?.name || 'Faculty'}
+                    </p>
+                    {((semesterData || editableSemesterData)?.designation || user?.name) && (
                         <p className="text-sm text-slate-400">
-                            {semesterData.designation} • {semesterData.semester}
+                            {(semesterData || editableSemesterData)?.designation || ''} • {selectedSemester}
                         </p>
                     )}
                 </div>
@@ -711,6 +1080,13 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                 <div className="mb-4 p-4 text-center text-slate-400">
                     <i className="fa-solid fa-spinner fa-spin mr-2"></i>
                     Loading timetable...
+                </div>
+            )}
+            
+            {!isLoading && !semesterData && !editableSemesterData && canEditTimetable && !isEditing && (
+                <div className="mb-4 p-4 text-center text-slate-400 border border-slate-700/50 rounded-lg bg-slate-800/30">
+                    <p className="mb-2">No timetable data found for {selectedSemester}.</p>
+                    <p className="text-sm">Click "Edit" to create a new timetable for this semester, or use the "+" button in empty cells to add classes.</p>
                 </div>
             )}
             
@@ -773,7 +1149,7 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                                                     } catch (e) {
                                                         // Fallback
                                                     }
-                                                    return time === "10:20-10:40" || time === "09:25-10:20" ? "Coffee Break" : "Lunch Break";
+                                                    return time === "10:20-10:40" ? "Coffee Break" : "Lunch Break";
                                                 })()}
                                             </div>
                                         ) : isEditing && canEditTimetable ? (
@@ -802,6 +1178,7 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                                                         <option value="Theory">Theory</option>
                                                         <option value="Lab">Lab</option>
                                                         <option value="Free">Free</option>
+                                                        <option value="Busy">Busy</option>
                                                     </select>
                                                     <input
                                                         type="text"
@@ -823,8 +1200,8 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                                                             className="flex-1 bg-slate-600/80 hover:bg-slate-700 text-white text-[9px] rounded px-1.5 py-0.5"
                                                         >
                                                             Done
-                                                        </button>
-                                                    </div>
+                                                    </button>
+                                                </div>
                                                 </div>
                                             ) : semesterEntry ? (
                                                 (semesterEntry.classType as string) === 'Free' ? (
@@ -833,6 +1210,13 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                                                         onClick={() => setEditingCell({ day, time })}
                                                     >
                                                         <p className="text-slate-400 text-base font-medium">Free</p>
+                                                    </div>
+                                                ) : (semesterEntry.classType as string) === 'Busy' ? (
+                                                    <div 
+                                                        className="w-full h-full flex flex-col justify-center items-center cursor-pointer hover:opacity-80 bg-orange-500/20 rounded border border-orange-500/30"
+                                                        onClick={() => setEditingCell({ day, time })}
+                                                    >
+                                                        <p className="text-orange-400 text-base font-medium">Busy</p>
                                                     </div>
                                                 ) : (
                                                     <div 
@@ -874,6 +1258,10 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                                                     <div className="w-full h-full flex flex-col justify-center items-center">
                                                         <p className="text-slate-400 text-base font-medium">Free</p>
                                                     </div>
+                                                ) : (semesterEntry.classType as string) === 'Busy' ? (
+                                                    <div className="w-full h-full flex flex-col justify-center items-center bg-orange-500/20 rounded border border-orange-500/30">
+                                                        <p className="text-orange-400 text-base font-medium">Busy</p>
+                                                    </div>
                                                 ) : (
                                                     <div className="w-full h-full flex flex-col justify-center text-xs p-2 space-y-1">
                                                         <p className="font-bold text-white text-lg leading-tight">
@@ -891,12 +1279,12 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                                                             <p className="text-slate-300 text-xs" title={`Batch: ${semesterEntry.batch}`}>
                                                                 {semesterEntry.batch}
                                                             </p>
-                                                        )}
-                                                    </div>
+                                        )}
+                                    </div>
                                                 )
                                             ) : (
-                                                <div className="w-full h-full flex flex-col justify-center">
-                                                    {/* Empty slot - no "Free" text, just empty */}
+                                                <div className="w-full h-full flex flex-col justify-center min-h-[100px]">
+                                                    {/* Empty slot - blank cell, ready for data */}
                                                 </div>
                                             )}
                                     </motion.div>
