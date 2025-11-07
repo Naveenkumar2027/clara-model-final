@@ -2,6 +2,16 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Modality, Blob, FunctionDeclaration, Type } from '@google/genai';
 import { CallService } from './src/services/CallService';
+import MapNavigator from './src/MapNavigator';
+import LocationMatcher from './src/locationMatcher';
+import { Location } from './src/locationsDatabase';
+import WebRTCVideoCall from './src/components/WebRTCVideoCall';
+import { useCallStore } from './src/stores/callStore';
+import DevicePermissionPrompt from './src/components/DevicePermissionPrompt';
+import CallRoom from './src/components/CallRoom';
+import CallToast, { ToastType } from './src/components/CallToast';
+import CallEndSummary from './src/components/CallEndSummary';
+import './src/MapNavigator.css';
 
 // --- Helper functions for Audio Encoding/Decoding ---
 
@@ -86,20 +96,65 @@ const SpeakerIcon = ({size=20}) => (
 const PencilIcon = ({size=20}) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"></path></svg>
 );
+const MapIcon = ({size=16}) => (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"></path></svg>
+);
 
+const WelcomeScreen = ({ onStartConversation }) => {
+    return (
+        <div className="welcome-screen">
+            <div className="welcome-background">
+                <div className="circuit-pattern"></div>
+                <div className="wave-pattern"></div>
+            </div>
+            <div className="welcome-content">
+                <div className="welcome-logo-section">
+                    <div className="svit-logo">
+                        <div className="logo-circle">
+                            <div className="logo-flame"></div>
+                        </div>
+                        <div className="logo-text">
+                            <div className="logo-sanskrit">श्रद्धावान</div>
+                            <div className="logo-sanskrit">लभ ते ज्ञान</div>
+                        </div>
+                        <div className="logo-acronym">
+                            <div className="svit">SVIT</div>
+                            <div className="motto">Learn to Lead</div>
+                        </div>
+                    </div>
+                    <div className="institute-name">
+                        <h2 className="sai-vidya">SAI VIDYA</h2>
+                        <p className="institute">INSTITUTE OF TECHNOLOGY</p>
+                    </div>
+                </div>
+                <div className="welcome-message-section">
+                    <h1 className="welcome-title">WELCOME!!</h1>
+                    <p className="welcome-subtitle">How can I help you??</p>
+                </div>
+                <button className="start-conversation-btn" onClick={onStartConversation}>
+                    Start a conversation
+                </button>
+                <div className="powered-by">
+                    <span>Powered by</span>
+                    <span className="clara-name">CLARA - AI RECEPTIONIST</span>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const staffList = [
-    { name: 'Prof. Lakshmi Durga N', shortName: 'LDN' },
-    { name: 'Prof. Anitha C S', shortName: 'ACS' },
-    { name: 'Dr. G Dhivyasri', shortName: 'GD' },
-    { name: 'Prof. Nisha S K', shortName: 'NSK' },
-    { name: 'Prof. Amarnath B Patil', shortName: 'ABP' },
-    { name: 'Dr. Nagashree N', shortName: 'NN' },
-    { name: 'Prof. Anil Kumar K V', shortName: 'AKV' },
-    { name: 'Prof. Jyoti Kumari', shortName: 'JK' },
-    { name: 'Prof. Vidyashree R', shortName: 'VR' },
-    { name: 'Dr. Bhavana A', shortName: 'BA' },
-    { name: 'Prof. Bhavya T N', shortName: 'BTN' },
+    { name: 'Prof. Lakshmi Durga N', shortName: 'LDN', route: '/ldn', email: 'lakshmidurgan@gmail.com' },
+    { name: 'Prof. Anitha C S', shortName: 'ACS', route: '/acs', email: 'anithacs@gmail.com' },
+    { name: 'Dr. G Dhivyasri', shortName: 'GD', route: '/gd', email: 'gdhivyasri@gmail.com' },
+    { name: 'Prof. Nisha S K', shortName: 'NSK', route: '/nsk', email: 'nishask@gmail.com' },
+    { name: 'Prof. Amarnath B Patil', shortName: 'ABP', route: '/abp', email: 'amarnathbpatil@gmail.com' },
+    { name: 'Dr. Nagashree N', shortName: 'NN', route: '/nn', email: 'nagashreen@gmail.com' },
+    { name: 'Prof. Anil Kumar K V', shortName: 'AKV', route: '/akv', email: 'anilkumarkv@gmail.com' },
+    { name: 'Prof. Jyoti Kumari', shortName: 'JK', route: '/jk', email: 'jyotikumari@gmail.com' },
+    { name: 'Prof. Vidyashree R', shortName: 'VR', route: '/vr', email: 'vidyashreer@gmail.com' },
+    { name: 'Dr. Bhavana A', shortName: 'BA', route: '/ba', email: 'bhavanaa@gmail.com' },
+    { name: 'Prof. Bhavya T N', shortName: 'BTN', route: '/btn', email: 'bhavyatn@gmail.com' },
 ];
 
 const initiateVideoCallFunction: FunctionDeclaration = {
@@ -132,10 +187,14 @@ const PreChatModal = ({ onStart }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (details.name.trim() && details.purpose.trim()) {
+        if (details.name.trim() && details.purpose.trim() && details.staffShortName) {
             onStart(details);
         } else {
+            if (!details.staffShortName) {
+                alert('Please select a staff member to continue.');
+        } else {
             alert('Please fill in your name and purpose.');
+            }
         }
     };
 
@@ -161,8 +220,8 @@ const PreChatModal = ({ onStart }) => {
                          <textarea id="purpose" name="purpose" value={details.purpose} onChange={handleChange} required />
                     </div>
                     <div className="form-field">
-                        <label htmlFor="staff">Connect with (Optional)</label>
-                        <select id="staff" name="staffShortName" value={details.staffShortName} onChange={handleChange}>
+                        <label htmlFor="staff">Connect with <span className="required-asterisk">*</span></label>
+                        <select id="staff" name="staffShortName" value={details.staffShortName} onChange={handleChange} required>
                             <option value="">Select a staff member...</option>
                             {staffList.map(staff => (
                                 <option key={staff.shortName} value={staff.shortName}>
@@ -222,15 +281,16 @@ const VideoCallView = ({ staff, onEndCall, activeCall }) => {
     useEffect(() => {
         const startCameraAndAudio = async () => {
             try {
-                // Use activeCall's local stream if available, otherwise get new stream
-                let stream: MediaStream;
-                if (activeCall?.localStream) {
-                    stream = activeCall.localStream;
-                    streamRef.current = stream;
-                } else {
-                    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                    streamRef.current = stream;
+                // If pc and localStream are null, we're in "ringing" state - don't access camera yet
+                if (!activeCall?.pc || !activeCall?.localStream) {
+                    // Show "Ringing..." state
+                    setIsConnected(false);
+                    return;
                 }
+                
+                // Use activeCall's local stream
+                const stream = activeCall.localStream;
+                streamRef.current = stream;
                 
                 if (userVideoRef.current) {
                     userVideoRef.current.srcObject = stream;
@@ -307,6 +367,22 @@ const VideoCallView = ({ staff, onEndCall, activeCall }) => {
         }
     };
 
+    // Watch isCameraOn state and update video element when camera is re-enabled
+    useEffect(() => {
+        if (isCameraOn && streamRef.current && userVideoRef.current) {
+            // Re-attach stream to video element when camera is re-enabled
+            const videoTrack = streamRef.current.getVideoTracks()[0];
+            if (videoTrack && videoTrack.enabled) {
+                // Ensure video element is properly connected
+                if (userVideoRef.current.srcObject !== streamRef.current) {
+                    userVideoRef.current.srcObject = streamRef.current;
+                }
+                // Force video to play
+                userVideoRef.current.play().catch(err => console.error('Error playing video:', err));
+            }
+        }
+    }, [isCameraOn]);
+
     return (
         <div className="video-call-container">
              {countdown > 0 && (
@@ -317,13 +393,26 @@ const VideoCallView = ({ staff, onEndCall, activeCall }) => {
             <div className="staff-video-view">
                 {activeCall?.remoteStream ? (
                     <video ref={staffVideoRef} autoPlay playsInline className="staff-video"></video>
-                ) : (
+                ) : activeCall?.pc && activeCall?.localStream ? (
                     <div className={`staff-avatar-placeholder ${isStaffSpeaking && isConnected ? 'speaking' : ''}`}>
                         <StaffLoginIcon size={80} />
                     </div>
+                ) : (
+                    <div className="staff-avatar-placeholder ringing">
+                        <StaffLoginIcon size={80} />
+                        <div className="ringing-indicator">
+                            <div className="ringing-dot"></div>
+                            <div className="ringing-dot"></div>
+                            <div className="ringing-dot"></div>
+                        </div>
+                    </div>
                 )}
                 <h2>{staff.name}</h2>
-                <p>{isConnected ? 'Connected' : 'Connecting...'}</p>
+                <p>
+                    {activeCall?.remoteStream ? 'Connected' : 
+                     activeCall?.pc && activeCall?.localStream ? 'Connecting...' : 
+                     'Ringing...'}
+                </p>
                  <div className="video-call-branding">
                     <RobotIcon size={20} /> Clara Video
                 </div>
@@ -357,30 +446,69 @@ const App = () => {
     const [messages, setMessages] = useState([]);
     const [isRecording, setIsRecording] = useState(false);
     const [status, setStatus] = useState('Click the microphone to speak');
-    const [showPreChatModal, setShowPreChatModal] = useState(true);
+    const [showWelcomeScreen, setShowWelcomeScreen] = useState(true);
+    const [showPreChatModal, setShowPreChatModal] = useState(false);
     const [preChatDetails, setPreChatDetails] = useState(null);
-    const [view, setView] = useState('chat'); // 'chat', 'video_call'
+    const [isCollegeQueryActive, setIsCollegeQueryActive] = useState(false); // Track if current query is college-related
+    const isCollegeQueryActiveRef = useRef(false); // Immediate ref for race condition prevention
+    const [view, setView] = useState('chat'); // 'chat', 'video_call', 'map'
     const [videoCallTarget, setVideoCallTarget] = useState(null);
     const [unifiedCallService, setUnifiedCallService] = useState<CallService | null>(null);
     const [isUnifiedCalling, setIsUnifiedCalling] = useState(false);
-    const [activeCall, setActiveCall] = useState<{ callId: string; pc: RTCPeerConnection; localStream: MediaStream; remoteStream: MediaStream | null } | null>(null);
+    const [isDemoMode, setIsDemoMode] = useState(false);
+    const [detectedLanguage, setDetectedLanguage] = useState<string>('en'); // Default to English
+    const [activeCall, setActiveCall] = useState<{ 
+        callId: string; 
+        roomName: string;
+        pc?: RTCPeerConnection;
+        stream?: MediaStream;
+        remoteStream?: MediaStream | null;
+    } | null>(null);
+    
+    // New call store integration
+    const callStore = useCallStore();
+    const [showPermissionPrompt, setShowPermissionPrompt] = useState(false);
+    const [pendingCallStaff, setPendingCallStaff] = useState<any>(null);
+    const [toast, setToast] = useState<{ type: ToastType; message?: string } | null>(null);
+    const [showEndSummary, setShowEndSummary] = useState(false);
+    
+    // Sync callStore with activeCall for backward compatibility
+    useEffect(() => {
+        if (activeCall && callStore.state === 'idle') {
+            callStore.setDialing(activeCall.callId);
+        }
+    }, [activeCall]);
+    
+    // Debug: Log view changes (moved after all state declarations)
+    useEffect(() => {
+        console.log('[Client] View changed to:', view);
+        console.log('[Client] activeCall:', activeCall);
+        console.log('[Client] videoCallTarget:', videoCallTarget);
+    }, [view, activeCall, videoCallTarget]);
+    // Map navigator states (from remote)
+    const [showMap, setShowMap] = useState(false);
+    const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
+    const [currentFloor, setCurrentFloor] = useState(0);
+    const locationMatcher = useRef(new LocationMatcher()).current;
+    // Call confirmation states (from local)
+    const [showCallConfirmation, setShowCallConfirmation] = useState(false);
+    const [pendingCall, setPendingCall] = useState<{ staff: any } | null>(null);
     
     const sessionPromiseRef = useRef(null);
-    const isReconnectingRef = useRef(false);
-    const reconnectAttemptsRef = useRef(0);
-    const maxReconnectAttempts = 3;
-    const isIntentionallyClosingRef = useRef(false);
     const inputAudioContextRef = useRef(null);
     const outputAudioContextRef = useRef(null);
     const outputNodeRef = useRef(null);
     const scriptProcessorRef = useRef(null);
+    const analyserRef = useRef(null);
     const mediaStreamSourceRef = useRef(null);
     const streamRef = useRef(null);
-    const sourcesRef = useRef(new Set());
+    const sourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
     const nextStartTimeRef = useRef(0);
     const chatContainerRef = useRef(null);
     const silenceStartRef = useRef(null);
     const isRecordingRef = useRef(false);
+    // Ref to store current preChatDetails for access in closures
+    const preChatDetailsRef = useRef(null);
     // Accumulators for streaming transcriptions so full sentences are shown
     const inputAccumRef = useRef<string>('');
     const outputAccumRef = useRef<string>('');
@@ -403,57 +531,76 @@ const App = () => {
             console.error("Failed to clear session storage", error);
         }
         
-        // Initialize unified call service if enabled
-        const enableUnified = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true';
+        // Load TTS voices
+        if ('speechSynthesis' in window) {
+            // Chrome needs voices to be loaded
+            const loadVoices = () => {
+                window.speechSynthesis.getVoices();
+            };
+            loadVoices();
+            if (window.speechSynthesis.onvoiceschanged !== undefined) {
+                window.speechSynthesis.onvoiceschanged = loadVoices;
+            }
+        }
+        
+        // ALWAYS initialize unified call service for WebRTC calls
+        // This enables video calls via sockets regardless of AI mode
+        const enableUnified = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true' || true; // Force enable for presentation
+        console.log('[App] Initializing unified call service, enableUnified:', enableUnified);
+        
         if (enableUnified) {
             // Get or create token
             let token = localStorage.getItem('clara-jwt-token');
-            if (!token) {
-                // Auto-login for demo (in production, this should come from auth)
-                const apiBase = import.meta.env.VITE_API_BASE || 
-                  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
-                fetch(`${apiBase}/api/auth/login`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: 'client-' + Date.now(),
-                        role: 'client',
-                    }),
+            const clientId = localStorage.getItem('clara-client-id') || 'client-' + Date.now();
+            
+            // Always refresh token on app load to ensure it's valid
+            const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+            console.log('[App] Initializing/refreshing token...');
+            console.log('[App] Using API base:', apiBase);
+            
+            fetch(`${apiBase}/api/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    username: clientId,
+                    role: 'client',
+                }),
+            })
+                .then((res) => {
+                    if (!res.ok) {
+                        throw new Error(`Login failed: ${res.statusText}`);
+                    }
+                    return res.json();
                 })
-                    .then((res) => res.json())
                 .then((data) => {
                     token = data.token;
                     if (token) {
                         localStorage.setItem('clara-jwt-token', token);
-                        const clientId = 'client-' + Date.now();
                         localStorage.setItem('clara-client-id', clientId);
                         const service = new CallService({
                             token,
                             clientId,
                         });
                         setUnifiedCallService(service);
+                        console.log('[App] CallService initialized with fresh token, clientId:', clientId);
+                    } else {
+                        console.error('[App] No token received from login');
                     }
                 })
-                    .catch(console.error);
-            } else {
-                const service = new CallService({
-                    token,
-                    clientId: localStorage.getItem('clara-client-id') || 'client-' + Date.now(),
+                .catch((error) => {
+                    console.error('[App] Error during auto-login:', error);
+                    // If we have an old token, try using it anyway
+                    if (token) {
+                        const service = new CallService({
+                            token,
+                            clientId,
+                        });
+                        setUnifiedCallService(service);
+                        console.log('[App] CallService initialized with existing token (may be expired), clientId:', clientId);
+                    }
                 });
-                setUnifiedCallService(service);
-            }
-        }
-        
-        // Initialize output audio context on page load (required for audio playback)
-        if (typeof window !== 'undefined' && !outputAudioContextRef.current) {
-            try {
-                outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-                outputNodeRef.current = outputAudioContextRef.current.createGain();
-                outputNodeRef.current.connect(outputAudioContextRef.current.destination);
-                outputNodeRef.current.gain.value = 1.0;
-            } catch (error) {
-                console.error('Error initializing audio context on page load:', error);
-            }
+        } else {
+            console.warn('[App] Unified mode is disabled - video calls will not work');
         }
         
         // Don't set messages here - let handleStartConversation set the greeting after login
@@ -479,80 +626,698 @@ const App = () => {
         }
     }, [messages]);
 
+    // Sync ref whenever preChatDetails state changes
+    useEffect(() => {
+        preChatDetailsRef.current = preChatDetails;
+    }, [preChatDetails]);
+
+    // Define stopRecording first since it's used by other callbacks
+    const stopRecording = useCallback((closeSession = false) => {
+        if (!isRecordingRef.current && !closeSession) return; // Prevent multiple stops (unless explicitly closing)
+        
+        isRecordingRef.current = false;
+        setIsRecording(false);
+        setStatus('Click the microphone to speak');
+
+        if (streamRef.current) {
+            streamRef.current.getTracks().forEach(track => track.stop());
+            streamRef.current = null;
+        }
+        if (scriptProcessorRef.current) {
+            scriptProcessorRef.current.disconnect();
+            scriptProcessorRef.current = null;
+        }
+        if (analyserRef.current) {
+            analyserRef.current.disconnect();
+            analyserRef.current = null;
+        }
+        if (mediaStreamSourceRef.current) {
+            mediaStreamSourceRef.current.disconnect();
+            mediaStreamSourceRef.current = null;
+        }
+        if (inputAudioContextRef.current && inputAudioContextRef.current.state !== 'closed') {
+            inputAudioContextRef.current.close().catch(console.error);
+            inputAudioContextRef.current = null;
+        }
+        
+        silenceStartRef.current = null;
+        
+        // Only close session if explicitly requested (e.g., on error or user logout)
+        // Don't close session after normal recording stops - keep it alive for next interaction
+        if (closeSession && sessionPromiseRef.current) {
+            sessionPromiseRef.current.then(session => {
+                if (session && typeof session.close === 'function') {
+                    session.close().catch(console.error);
+                }
+            }).catch(console.error);
+            sessionPromiseRef.current = null;
+        }
+        // Session stays alive for next interaction - no logging needed
+    }, []);
+
+    // Actual call initiation function (called after confirmation)
+    const startCallAfterConfirmation = useCallback(async (staffToCall: any) => {
+        if (isRecordingRef.current) {
+            stopRecording(false);
+        }
+
+        // Use DevicePermissionPrompt instead of inline permission request
+        if (!callStore.canInitiate()) {
+            console.warn('[Call] Cannot initiate call from current state:', callStore.state);
+            return;
+        }
+
+        // Show permission prompt
+        callStore.initiateCall('Voice-initiated video call');
+        setPendingCallStaff(staffToCall);
+        setShowPermissionPrompt(true);
+    }, [callStore, stopRecording]);
+    
+    // Handle permission prompt result
+    const handlePermissionGranted = useCallback(async (stream: MediaStream, audioOnly: boolean) => {
+        setShowPermissionPrompt(false);
+        const staffToCall = pendingCallStaff;
+        if (!staffToCall) {
+            callStore.reset();
+            return;
+        }
+
+        callStore.setPreparing();
+        setToast({ type: 'connecting', message: 'Connecting to staff...' });
+
+        // Show confirmation message
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setMessages(prev => [...prev, { sender: 'clara', text: `Initiating video call with ${staffToCall.name}...`, isFinal: true, timestamp }]);
+        
+        // Store stream in callStore
+        callStore.setInCall({ localStream: stream });
+
+        // ALWAYS use unifiedCallService for WebRTC calls via sockets
+        if (unifiedCallService) {
+            console.log('[Call] Using unifiedCallService to initiate WebRTC call');
+            try {
+                // Map shortName to email prefix (how server identifies staff)
+                // The server uses email prefix (e.g., 'nagashreen' from 'nagashreen@gmail.com')
+                // as the staffId for socket rooms, so we need to extract it from the email
+                const emailPrefix = staffToCall.email.split('@')[0];
+                
+                callStore.setDialing(''); // Will be set when we get callId
+                const result = await unifiedCallService.startCall({
+                    targetStaffId: emailPrefix, // Use email prefix instead of shortName
+                    purpose: 'Voice-initiated video call',
+                    onAccepted: (callId, roomName) => {
+                        console.log('[Client] ===== CALL ACCEPTED =====');
+                        console.log('[Client] Call ID:', callId, 'Room:', roomName);
+                        console.log('[Client] Staff:', staffToCall);
+                        
+                        // Update callStore
+                        callStore.onAccepted(callId, { id: staffToCall.email.split('@')[0], name: staffToCall.name });
+                        callStore.setConnecting();
+                        setToast({ type: 'accepted', message: 'Call accepted! Connecting...' });
+                        
+                        // Get peer connection from CallService
+                        const callData = unifiedCallService.getActiveCall(callId);
+                        console.log('[Client] Call data from service:', callData);
+                        
+                        if (callData) {
+                            console.log('[Client] Setting activeCall with peer connection...');
+                            setActiveCall({
+                                callId,
+                                roomName,
+                                pc: callData.pc,
+                                stream: callData.stream,
+                                remoteStream: callData.remoteStream || null,
+                            });
+                            
+                            // Update callStore with peer connection and streams
+                            callStore.setInCall({
+                                peerConnection: callData.pc,
+                                localStream: callData.stream,
+                                remoteStream: callData.remoteStream || null,
+                            });
+                            
+                            // Watch for remote stream updates
+                            const checkRemoteStream = () => {
+                                const updatedCallData = unifiedCallService.getActiveCall(callId);
+                                if (updatedCallData && updatedCallData.remoteStream) {
+                                    console.log('[Client] Remote stream detected, updating activeCall...');
+                                    setActiveCall(prev => prev ? {
+                                        ...prev,
+                                        remoteStream: updatedCallData.remoteStream,
+                                    } : null);
+                                    callStore.setInCall({ remoteStream: updatedCallData.remoteStream });
+                                } else if (updatedCallData) {
+                                    // Check again in a bit
+                                    setTimeout(checkRemoteStream, 500);
+                                }
+                            };
+                            setTimeout(checkRemoteStream, 500);
+                        } else {
+                            console.warn('[Client] No call data found, setting basic activeCall...');
+                            setActiveCall({
+                                callId,
+                                roomName,
+                            });
+                        }
+                        
+                        setVideoCallTarget(staffToCall);
+                        console.log('[Client] Switching to video_call view...');
+                        setView('video_call');
+                        
+                        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        setMessages(prev => [...prev, { sender: 'clara', text: `Video call with ${staffToCall.name} connected!`, isFinal: true, timestamp }]);
+                        
+                        console.log('[Client] View should now be:', 'video_call');
+                    },
+                    onDeclined: (reason) => {
+                        callStore.onDeclined(reason);
+                        setToast({ type: 'declined', message: reason || 'Call declined by staff' });
+                        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        setMessages(prev => [...prev, { sender: 'clara', text: `Call declined${reason ? ': ' + reason : ''}.`, isFinal: true, timestamp }]);
+                        setView('chat');
+                        setActiveCall(null);
+                        setVideoCallTarget(null);
+                    },
+                    onError: (error) => {
+                        console.error('Call error:', error);
+                        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        setMessages(prev => [...prev, { sender: 'clara', text: `Failed to start call: ${error.message}`, isFinal: true, timestamp }]);
+                        setView('chat');
+                        setActiveCall(null);
+                        setVideoCallTarget(null);
+                    }
+                });
+
+                if (result) {
+                    callStore.setDialing(result.callId);
+                    callStore.setRinging();
+                    // Get peer connection from CallService
+                    const callData = unifiedCallService.getActiveCall(result.callId);
+                    if (callData) {
+                        setActiveCall({
+                            callId: result.callId,
+                            roomName: result.roomName,
+                            pc: callData.pc,
+                            stream: callData.stream,
+                            remoteStream: callData.remoteStream,
+                        });
+                        callStore.setInCall({
+                            peerConnection: callData.pc,
+                            localStream: callData.stream,
+                            remoteStream: callData.remoteStream || null,
+                        });
+                    } else {
+                        setActiveCall({
+                            callId: result.callId,
+                            roomName: result.roomName,
+                        });
+                    }
+                    setVideoCallTarget(staffToCall);
+                    
+                    // Show ringing message
+                    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    setMessages(prev => [...prev, { sender: 'clara', text: `Ringing ${staffToCall.name}...`, isFinal: true, timestamp }]);
+                } else {
+                    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                    setMessages(prev => [...prev, { sender: 'clara', text: 'Failed to start call. Please try again.', isFinal: true, timestamp }]);
+                }
+            } catch (error) {
+                console.error('Call initiation error:', error);
+                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                setMessages(prev => [...prev, { sender: 'clara', text: `Failed to start call: ${error.message}`, isFinal: true, timestamp }]);
+            }
+        } else {
+            // If unifiedCallService is not available, try to initialize it
+            console.warn('[Call] unifiedCallService not available, attempting to initialize...');
+            // Always use backend server port (8080), not the client dev server port
+            const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+            console.log('[Call] Using API base for retry:', apiBase);
+            
+            try {
+                const response = await fetch(`${apiBase}/api/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: 'client-' + Date.now(),
+                        role: 'client',
+                    }),
+                });
+                
+                const data = await response.json();
+                if (data.token) {
+                    localStorage.setItem('clara-jwt-token', data.token);
+                    const clientId = 'client-' + Date.now();
+                    localStorage.setItem('clara-client-id', clientId);
+                    const service = new CallService({
+                        token: data.token,
+                        clientId,
+                    });
+                    setUnifiedCallService(service);
+                    
+                    // Retry call initiation with newly created service
+                    console.log('[Call] Retrying call with newly initialized service');
+                    const retryResult = await service.startCall({
+                        targetStaffId: staffToCall.email.split('@')[0],
+                        purpose: 'Voice-initiated video call',
+                        onAccepted: (callId, roomName) => {
+                            console.log('Call accepted:', callId, 'Room:', roomName);
+                            setActiveCall({
+                                callId,
+                                roomName,
+                            });
+                            setVideoCallTarget(staffToCall);
+                            setView('video_call');
+                            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            setMessages(prev => [...prev, { sender: 'clara', text: `Video call with ${staffToCall.name} connected!`, isFinal: true, timestamp }]);
+                        },
+                        onDeclined: (reason) => {
+                            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            setMessages(prev => [...prev, { sender: 'clara', text: `Call declined${reason ? ': ' + reason : ''}.`, isFinal: true, timestamp }]);
+                            setView('chat');
+                            setActiveCall(null);
+                            setVideoCallTarget(null);
+                        },
+                        onError: (error) => {
+                            console.error('Call error:', error);
+                            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            setMessages(prev => [...prev, { sender: 'clara', text: `Failed to start call: ${error.message}`, isFinal: true, timestamp }]);
+                            setView('chat');
+                            setActiveCall(null);
+                            setVideoCallTarget(null);
+                        }
+                    });
+                    
+                    if (retryResult) {
+                        setActiveCall({
+                            callId: retryResult.callId,
+                            roomName: retryResult.roomName,
+                        });
+                        setVideoCallTarget(staffToCall);
+                        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        setMessages(prev => [...prev, { sender: 'clara', text: `Ringing ${staffToCall.name}...`, isFinal: true, timestamp }]);
+                    }
+                } else {
+                    throw new Error('Failed to get token');
+                }
+            } catch (error) {
+                console.error('[Call] Failed to initialize service and start call:', error);
+                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                setMessages(prev => [...prev, { sender: 'clara', text: `Failed to start call. Please ensure the server is running and unified mode is enabled.`, isFinal: true, timestamp }]);
+            }
+        }
+    }, [unifiedCallService, stopRecording, callStore, pendingCallStaff, setMessages, setToast]);
+
+    // Handle manual call initiation - shows confirmation first
+    const handleManualCallInitiation = useCallback(async (staffNameOrShortName?: string) => {
+        // Check if in demo mode
+        if (isDemoMode) {
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            setMessages(prev => [...prev, { sender: 'clara', text: 'Video calls are not available in demo mode. Please configure an API key to enable video calling.', isFinal: true, timestamp }]);
+            return;
+        }
+
+        const selectedStaffShortName = preChatDetailsRef.current?.staffShortName;
+        if (!selectedStaffShortName) {
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            setMessages(prev => [...prev, { sender: 'clara', text: 'Please select a staff member first to initiate a call.', isFinal: true, timestamp }]);
+            return;
+        }
+
+        const staffToCall = staffList.find(s => s.shortName === selectedStaffShortName);
+        if (!staffToCall) {
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            setMessages(prev => [...prev, { sender: 'clara', text: `Sorry, I couldn't find the selected staff member.`, isFinal: true, timestamp }]);
+            return;
+        }
+
+        // Stop recording if active
+        if (isRecordingRef.current) {
+            stopRecording(false);
+        }
+
+        // Show confirmation dialog instead of immediately starting call
+        setPendingCall({ staff: staffToCall });
+        setShowCallConfirmation(true);
+    }, [stopRecording, isDemoMode]);
+
+    // Helper function to detect if query is college-related
+    const isCollegeQuery = (text: string): boolean => {
+        const collegeKeywords = [
+            'college', 'admission', 'fee', 'fees', 'department', 'departments',
+            'faculty', 'placement', 'event', 'events', 'campus', 'course', 'courses',
+            'branch', 'cse', 'mechanical', 'civil', 'ece', 'ise', 'engineering',
+            'saividya', 'svit', 'sai vidya', 'institute', 'academic', 'semester',
+            'timetable', 'schedule', 'hostel', 'transport', 'library', 'lab',
+            'professor', 'prof', 'dr.', 'doctor', 'staff', 'teacher', 'lecturer'
+        ];
+        
+        // Also check for staff member names (including common variations)
+        const staffNames = [
+            'lakshmi durga', 'anitha', 'dhivyasri', 'nisha', 'amarnath', 
+            'nagashree', 'nagashri', 'nagash', // Handle "Nagashri" vs "Nagashree"
+            'anil kumar', 'jyoti', 'vidyashree', 'bhavana', 'bhavya', 
+            'ldn', 'acs', 'gd', 'nsk', 'abp', 'nn', 'akv', 'jk', 'vr', 'ba', 'btn'
+        ];
+        
+        const lowerText = text.toLowerCase();
+        const hasCollegeKeyword = collegeKeywords.some(keyword => lowerText.includes(keyword));
+        const hasStaffName = staffNames.some(name => lowerText.includes(name));
+        
+        return hasCollegeKeyword || hasStaffName;
+    };
+
+    // Helper function to detect language from text
+    const detectLanguage = (text: string): string => {
+        // Simple language detection based on character patterns
+        // Telugu: Contains Telugu Unicode range (0x0C00-0x0C7F)
+        const teluguPattern = /[\u0C00-\u0C7F]/;
+        // Hindi: Contains Devanagari Unicode range (0x0900-0x097F)
+        const hindiPattern = /[\u0900-\u097F]/;
+        // Tamil: Contains Tamil Unicode range (0x0B80-0x0BFF)
+        const tamilPattern = /[\u0B80-\u0BFF]/;
+        // Kannada: Contains Kannada Unicode range (0x0C80-0x0CFF)
+        const kannadaPattern = /[\u0C80-\u0CFF]/;
+        // Malayalam: Contains Malayalam Unicode range (0x0D00-0x0D7F)
+        const malayalamPattern = /[\u0D00-\u0D7F]/;
+        
+        if (teluguPattern.test(text)) return 'te'; // Telugu
+        if (hindiPattern.test(text)) return 'hi'; // Hindi
+        if (tamilPattern.test(text)) return 'ta'; // Tamil
+        if (kannadaPattern.test(text)) return 'kn'; // Kannada
+        if (malayalamPattern.test(text)) return 'ml'; // Malayalam
+        
+        // Default to English for other languages
+        return 'en';
+    };
+
+    // Helper function to speak text using TTS (browser's speechSynthesis)
+    const speakWithTTS = (text: string, language?: string) => {
+        if (!('speechSynthesis' in window)) {
+            console.warn('Speech synthesis not supported');
+            return;
+        }
+        
+        // Clean text - remove markdown formatting
+        const cleanText = text
+            .replace(/\*\*/g, '') // Remove bold markers
+            .replace(/\*/g, '') // Remove italic markers
+            .replace(/#{1,6}\s/g, '') // Remove headers
+            .replace(/•/g, '') // Remove bullet points
+            .replace(/\n/g, ' ') // Replace newlines with spaces
+            .trim();
+        
+        if (!cleanText) return;
+        
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(cleanText);
+        utterance.rate = 0.9;
+        utterance.pitch = 1.1;
+        utterance.volume = 1.0;
+        
+        // Set language if provided
+        if (language) {
+            utterance.lang = language === 'te' ? 'te-IN' : 
+                           language === 'hi' ? 'hi-IN' : 
+                           language === 'ta' ? 'ta-IN' : 
+                           language === 'kn' ? 'kn-IN' : 
+                           language === 'ml' ? 'ml-IN' : 'en-US';
+        }
+        
+        const voices = window.speechSynthesis.getVoices();
+        const femaleVoiceNames = ['zira', 'hazel', 'susan', 'linda', 'karen', 'samantha', 'victoria', 'sarah', 'female'];
+        const preferredVoice = voices.find(v => {
+            const langMatch = language ? 
+                (language === 'te' && v.lang.startsWith('te')) ||
+                (language === 'hi' && v.lang.startsWith('hi')) ||
+                (language === 'ta' && v.lang.startsWith('ta')) ||
+                (language === 'kn' && v.lang.startsWith('kn')) ||
+                (language === 'ml' && v.lang.startsWith('ml')) ||
+                (!language && v.lang.startsWith('en')) :
+                v.lang.startsWith('en');
+            return langMatch && femaleVoiceNames.some(name => v.name.toLowerCase().includes(name));
+        }) || voices.find(v => language ? 
+            (language === 'te' && v.lang.startsWith('te')) ||
+            (language === 'hi' && v.lang.startsWith('hi')) ||
+            (language === 'ta' && v.lang.startsWith('ta')) ||
+            (language === 'kn' && v.lang.startsWith('kn')) ||
+            (language === 'ml' && v.lang.startsWith('ml')) :
+            v.lang.startsWith('en'));
+        
+        if (preferredVoice) {
+            utterance.voice = preferredVoice;
+        }
+        
+        utterance.onend = () => setStatus('Click the microphone to speak');
+        utterance.onerror = () => setStatus('Click the microphone to speak');
+        window.speechSynthesis.speak(utterance);
+        setStatus('Speaking...');
+    };
+
+    // Helper function to generate Zephyr voice audio using Gemini (optional, falls back to TTS)
+    const speakWithZephyr = async (text: string, language?: string) => {
+        try {
+            // Stop any ongoing AI audio playback first
+            if (outputAudioContextRef.current && sourcesRef.current.size > 0) {
+                sourcesRef.current.forEach(source => {
+                    try {
+                        source.stop();
+                    } catch (e) {
+                        // Ignore errors if already stopped
+                    }
+                });
+                sourcesRef.current.clear();
+                nextStartTimeRef.current = 0;
+            }
+            
+            // Clean text - remove markdown formatting
+            const cleanText = text
+                .replace(/\*\*/g, '') // Remove bold markers
+                .replace(/\*/g, '') // Remove italic markers
+                .replace(/#{1,6}\s/g, '') // Remove headers
+                .replace(/•/g, '') // Remove bullet points
+                .replace(/\n/g, ' ') // Replace newlines with spaces
+                .trim();
+            
+            if (!cleanText) return;
+            
+            // Get API key
+            const apiKey = process.env.API_KEY || 
+                          import.meta.env.VITE_API_KEY || 
+                          import.meta.env.VITE_GEMINI_API_KEY ||
+                          'AIzaSyABTSkPg0qPKX3aH9pOMbXtX_BQo32O8Hg';
+            
+            // If no API key, use TTS instead
+            if (!apiKey) {
+                console.warn('No API key for Zephyr voice, falling back to TTS');
+                speakWithTTS(cleanText, language);
+                return;
+            }
+            
+            // Ensure audio context is ready
+            if (!outputAudioContextRef.current || outputAudioContextRef.current.state === 'closed') {
+                outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+            }
+            if (!outputNodeRef.current) {
+                outputNodeRef.current = outputAudioContextRef.current.createGain();
+                outputNodeRef.current.connect(outputAudioContextRef.current.destination);
+                outputNodeRef.current.gain.value = 1.0;
+            }
+            
+            // Use Gemini to generate audio with Zephyr voice
+            const ai = new GoogleGenAI({ apiKey });
+            setStatus('Speaking...');
+            
+            // Create a temporary session just for audio generation
+            let sessionRef: any = null;
+            let isSessionClosing = false;
+            
+            const closeSessionSafely = () => {
+                if (!isSessionClosing && sessionRef) {
+                    isSessionClosing = true;
+                    try {
+                        if (sessionRef && typeof sessionRef.close === 'function') {
+                            sessionRef.close().catch(() => {}).finally(() => {
+                                sessionRef = null;
+                                isSessionClosing = false;
+                            });
+                        } else {
+                            sessionRef = null;
+                            isSessionClosing = false;
+                        }
+                    } catch (e) {
+                        console.error('Error closing session:', e);
+                        sessionRef = null;
+                        isSessionClosing = false;
+                    }
+                }
+            };
+            
+            const tempSessionPromise = ai.live.connect({
+                model: 'gemini-2.5-flash-native-audio-preview-09-2025',
+                callbacks: {
+                    onopen: async () => {
+                        // Session is ready, send text to generate audio
+                        try {
+                            const session = await tempSessionPromise;
+                            if (session) {
+                                sessionRef = session;
+                                session.sendRealtimeInput({ text: cleanText });
+                            }
+                        } catch (error) {
+                            console.error('Error in onopen:', error);
+                            setStatus('Click the microphone to speak');
+                        }
+                    },
+                    onmessage: async (message) => {
+                        const base64Audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+                        if (base64Audio) {
+                            try {
+                                const decodedAudio = decode(base64Audio);
+                                const audioBuffer = await decodeAudioData(decodedAudio, outputAudioContextRef.current, 24000, 1);
+                                
+                                const currentTime = outputAudioContextRef.current.currentTime;
+                                const startTime = Math.max(nextStartTimeRef.current, currentTime);
+                                
+                                const source = outputAudioContextRef.current.createBufferSource();
+                                source.buffer = audioBuffer;
+                                source.connect(outputNodeRef.current);
+                                source.start(startTime);
+                                
+                                nextStartTimeRef.current = startTime + audioBuffer.duration;
+                                sourcesRef.current.add(source);
+                                
+                                source.onended = () => {
+                                    sourcesRef.current.delete(source);
+                                    // Only close session and reset when all audio chunks are done AND turn is complete
+                                    if (sourcesRef.current.size === 0) {
+                                        nextStartTimeRef.current = 0;
+                                        setStatus('Click the microphone to speak');
+                                        // Wait a bit more to ensure all audio is processed, then close
+                                        setTimeout(() => {
+                                            if (sourcesRef.current.size === 0) {
+                                                closeSessionSafely();
+                                            }
+                                        }, 500);
+                                    }
+                                };
+                            } catch (error) {
+                                console.error('Error processing Zephyr audio:', error);
+                                setStatus('Click the microphone to speak');
+                                closeSessionSafely();
+                            }
+                        }
+                        
+                        // Check if turn is complete - but don't close immediately, wait for all audio to finish
+                        if (message.serverContent?.turnComplete) {
+                            // Mark that turn is complete, but let audio finish playing
+                            // The session will close when all audio sources finish (in onended handler)
+                            console.log('[Zephyr] Turn complete, waiting for audio to finish...');
+                        }
+                    },
+                    onerror: (e) => {
+                        console.error('Zephyr audio generation error:', e);
+                        setStatus('Click the microphone to speak');
+                        closeSessionSafely();
+                    },
+                    onclose: () => {
+                        sessionRef = null;
+                        isSessionClosing = false;
+                    }
+                },
+                config: {
+                    responseModalities: [Modality.AUDIO],
+                    speechConfig: { 
+                        voiceConfig: { 
+                            prebuiltVoiceConfig: { 
+                                voiceName: 'Zephyr'
+                            } 
+                        } 
+                    },
+                    systemInstruction: `You are Clara, a friendly AI receptionist. Speak naturally and clearly. ${language ? `Respond in ${language === 'te' ? 'Telugu' : language === 'hi' ? 'Hindi' : language === 'ta' ? 'Tamil' : language === 'kn' ? 'Kannada' : language === 'ml' ? 'Malayalam' : 'English'}.` : ''}`,
+                },
+            });
+            
+        } catch (error) {
+            console.error('Error in Zephyr voice generation:', error);
+            setStatus('Click the microphone to speak');
+        }
+    };
+
+    // Helper function to call College AI API (silent, no error messages)
+    const callCollegeAI = async (query: string, sessionId: string): Promise<string> => {
+        try {
+            const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
+            const response = await fetch(`${apiBase}/api/college/ask`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    message: query,
+                    sessionId: sessionId || 'client-' + Date.now(),
+                    name: preChatDetailsRef.current?.name,
+                    email: preChatDetailsRef.current?.phone // Using phone as contact
+                })
+            });
+            
+            if (!response.ok) {
+                // Silently fallback - don't show error to user
+                console.error('College AI API error:', response.statusText);
+                return 'I don\'t have that information available right now. Could you please rephrase your question?';
+            }
+            
+            const data = await response.json();
+            return data.response || data.message || 'I don\'t have that information available right now. Could you please rephrase your question?';
+        } catch (error: any) {
+            // Silently handle errors - don't show technical error messages
+            console.error('College AI API error:', error);
+            return 'I don\'t have that information available right now. Could you please rephrase your question?';
+        }
+    };
+
     // Helper function to create message handler
     const createMessageHandler = () => {
         return async (message) => {
+            // Early return if we're processing a college query - ignore all AI messages
+            // Use ref for immediate check (state updates are async)
+            if (isCollegeQueryActive || isCollegeQueryActiveRef.current) {
+                return; // Don't process any AI messages while college query is active
+            }
+            
             // Handle tool calls first
             if (message.toolCall) {
                 for (const fc of message.toolCall.functionCalls) {
                     if (fc.name === 'initiateVideoCall') {
-                        const { staffShortName } = fc.args;
-                        const staffToCall = staffList.find(s => s.shortName === staffShortName);
+                        // Check if in demo mode
+                        if (isDemoMode) {
+                            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            setMessages(prev => [...prev, { sender: 'clara', text: 'Video calls are not available in demo mode. Please configure an API key to enable video calling.', isFinal: true, timestamp }]);
+                            return;
+                        }
                         
-                        if (staffToCall && unifiedCallService) {
+                        // Always use the selected staff from preChatDetailsRef (mandatory selection)
+                        // This ensures calls only go to the staff member selected in the dropdown
+                        const selectedStaffShortName = preChatDetailsRef.current?.staffShortName;
+                        if (!selectedStaffShortName) {
                             const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                            setMessages(prev => [...prev, { sender: 'clara', text: `Initiating video call with ${staffToCall.name}...`, isFinal: true, timestamp }]);
-                            stopRecording(true);
-                            
-                            // Actually start the WebRTC call
-                            unifiedCallService.startCall({
-                                targetStaffId: staffToCall.shortName, // Use shortName as staffId
-                                purpose: 'Voice-initiated video call',
-                                onAccepted: (callId, pc, remoteStream) => {
-                                    console.log('Call accepted:', callId);
-                                    // Update activeCall with remote stream
-                                    setActiveCall(prev => prev ? {
-                                        ...prev,
-                                        remoteStream,
-                                    } : null);
-                                    
-                                    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                    setMessages(prev => [...prev, { sender: 'clara', text: `Video call with ${staffToCall.name} connected!`, isFinal: true, timestamp }]);
-                                },
-                                onDeclined: (reason) => {
-                                    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                    setMessages(prev => [...prev, { sender: 'clara', text: `Call declined${reason ? ': ' + reason : ''}.`, isFinal: true, timestamp }]);
-                                    setView('chat');
-                                },
-                                onError: (error) => {
-                                    console.error('Call error:', error);
-                                    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                    setMessages(prev => [...prev, { sender: 'clara', text: `Failed to start call: ${error.message}`, isFinal: true, timestamp }]);
-                                    setView('chat');
-                                }
-                            }).then((result) => {
-                                if (result) {
-                                    // Store local stream from result immediately
-                                    const callState = {
-                                        callId: result.callId,
-                                        pc: result.pc,
-                                        localStream: result.stream,
-                                        remoteStream: null as MediaStream | null,
-                                    };
-                                    setActiveCall(callState);
-                                    setVideoCallTarget(staffToCall);
-                                    setView('video_call');
-                                } else {
-                                    const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                    setMessages(prev => [...prev, { sender: 'clara', text: 'Failed to start call. Please try again.', isFinal: true, timestamp }]);
-                                }
-                            }).catch((error) => {
-                                console.error('Call initiation error:', error);
-                                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                                setMessages(prev => [...prev, { sender: 'clara', text: `Failed to start call: ${error.message}`, isFinal: true, timestamp }]);
-                            });
-
+                            setMessages(prev => [...prev, { sender: 'clara', text: 'Please select a staff member first to initiate a call.', isFinal: true, timestamp }]);
+                            return;
+                        }
+                        
+                        // Use the manual call initiation function which handles all the routing and confirmation messages
+                        stopRecording(true);
+                        await handleManualCallInitiation();
+                        
+                        // Send tool response to Gemini
+                        if (sessionPromiseRef.current) {
                             sessionPromiseRef.current.then((session) => {
-                                session.sendToolResponse({
-                                    functionResponses: { id: fc.id, name: fc.name, response: { result: "Video call initiated successfully." } }
-                                })
-                            }).catch(console.error);
-                        } else {
-                            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                            const errorMsg = !staffToCall 
-                                ? `Sorry, I couldn't find a staff member with the ID "${staffShortName}".` 
-                                : 'Video calling is not available. Please enable unified mode.';
-                            setMessages(prev => [...prev, { sender: 'clara', text: errorMsg, isFinal: true, timestamp }]);
+                                if (session) {
+                                    session.sendToolResponse({
+                                        functionResponses: { id: fc.id, name: fc.name, response: { result: "Video call initiated successfully." } }
+                                    });
+                                }
+                            }).catch((err) => {
+                                console.error('Error sending tool response:', err);
+                                // Silently handle - don't show error to user
+                            });
                         }
                     }
                 }
@@ -563,6 +1328,15 @@ const App = () => {
             if (message.serverContent?.inputTranscription) {
                 const newText = message.serverContent.inputTranscription.text || '';
                 inputAccumRef.current = appendDelta(inputAccumRef.current, newText);
+                
+                // Detect language from user input and update state
+                if (newText) {
+                    const detectedLang = detectLanguage(inputAccumRef.current);
+                    if (detectedLang !== detectedLanguage) {
+                        setDetectedLanguage(detectedLang);
+                        console.log(`[Language] Detected language: ${detectedLang}`);
+                    }
+                }
                 // Update or create user message in real-time
                 setMessages(prev => {
                     let lastUserMsgIndex = -1;
@@ -592,13 +1366,15 @@ const App = () => {
             }
 
             // Handle output transcription (Clara) – accumulate full text
-            if (message.serverContent?.outputTranscription) {
+            // Skip if this is a college query (we'll use College AI instead)
+            // Skip if college query is active
+            if (message.serverContent?.outputTranscription && !isCollegeQueryActive && !isCollegeQueryActiveRef.current) {
                 const newText = message.serverContent.outputTranscription.text || '';
                 outputAccumRef.current = appendDelta(outputAccumRef.current, newText);
                 setMessages(prev => {
                     let lastClaraMsgIndex = -1;
                     for (let i = prev.length - 1; i >= 0; i--) {
-                        if (prev[i].sender === 'clara' && !prev[i].isFinal) {
+                        if (prev[i].sender === 'clara' && !prev[i].isFinal && !prev[i].isCollegeAI) {
                             lastClaraMsgIndex = i;
                             break;
                         }
@@ -632,12 +1408,160 @@ const App = () => {
                         if (updated[i].sender === 'user' && !updated[i].isFinal) { lastUserIndex = i; break; }
                     }
                     if (lastUserIndex >= 0) {
-                        updated[lastUserIndex] = { ...updated[lastUserIndex], text: inputAccumRef.current || updated[lastUserIndex].text, isFinal: true };
+                        const userText = inputAccumRef.current || updated[lastUserIndex].text;
+                        updated[lastUserIndex] = { ...updated[lastUserIndex], text: userText, isFinal: true };
+                        
+                        // Detect and update language from user input
+                        const detectedLang = detectLanguage(userText);
+                        if (detectedLang !== detectedLanguage) {
+                            setDetectedLanguage(detectedLang);
+                            console.log(`[Language] Detected language from final input: ${detectedLang}`);
+                        }
+                        
+                        // Check if this is a college-related query - if so, use College AI silently
+                        if (isCollegeQuery(userText)) {
+                            // Set flag immediately using ref (state updates are async)
+                            isCollegeQueryActiveRef.current = true;
+                            setIsCollegeQueryActive(true);
+                            
+                            // College query mode enabled
+                            
+                            // Stop any ongoing AI audio immediately (before response arrives)
+                            if (outputAudioContextRef.current && sourcesRef.current.size > 0) {
+                                sourcesRef.current.forEach(source => {
+                                    try {
+                                        source.stop();
+                                    } catch (e) {
+                                        // Ignore errors
+                                    }
+                                });
+                                sourcesRef.current.clear();
+                                nextStartTimeRef.current = 0;
+                            }
+                            
+                            // Stop any ongoing AI session immediately
+                            if (sessionPromiseRef.current) {
+                                try {
+                                    const currentSessionPromise = sessionPromiseRef.current;
+                                    sessionPromiseRef.current = null; // Clear immediately to prevent new messages
+                                    currentSessionPromise.then(session => {
+                                        if (session && typeof session.close === 'function') {
+                                            session.close().catch(() => {}); // Silently close
+                                        }
+                                    }).catch(() => {});
+                                } catch (e) {
+                                    // Ignore errors
+                                }
+                            }
+                            
+                            // Stop recording if active
+                            if (isRecordingRef.current) {
+                                stopRecording(false);
+                            }
+                            
+                            const sessionId = localStorage.getItem('clara-client-id') || 'client-' + Date.now();
+                            
+                            // Call College AI API silently (no announcements)
+                            callCollegeAI(userText, sessionId).then(collegeResponse => {
+                                // Stop any ongoing AI audio immediately before TTS
+                                if (outputAudioContextRef.current && sourcesRef.current.size > 0) {
+                                    sourcesRef.current.forEach(source => {
+                                        try {
+                                            source.stop();
+                                        } catch (e) {
+                                            // Ignore errors
+                                        }
+                                    });
+                                    sourcesRef.current.clear();
+                                    nextStartTimeRef.current = 0;
+                                }
+                                
+                                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                setMessages(prevMessages => {
+                                    // Remove any incomplete Clara message and add College AI response
+                                    const filtered = prevMessages.filter((msg, idx) => 
+                                        !(idx === prevMessages.length - 1 && msg.sender === 'clara' && !msg.isFinal)
+                                    );
+                                    return [...filtered, {
+                                        sender: 'clara',
+                                        text: collegeResponse,
+                                        isFinal: true,
+                                        timestamp,
+                                        isCollegeAI: true // Mark as College AI response
+                                    }];
+                                });
+                                
+                                // Use TTS to read the College AI response
+                                // Detect language from user input and use it for TTS
+                                const userLang = detectLanguage(userText);
+                                speakWithTTS(collegeResponse, userLang);
+                                
+                                setStatus('Click the microphone to speak');
+                                // Reset flags after response
+                                isCollegeQueryActiveRef.current = false;
+                                setIsCollegeQueryActive(false);
+                            }).catch(error => {
+                                // Silently handle errors - show a simple message
+                                console.error('College AI error:', error);
+                                const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                                setMessages(prevMessages => {
+                                    const filtered = prevMessages.filter((msg, idx) => 
+                                        !(idx === prevMessages.length - 1 && msg.sender === 'clara' && !msg.isFinal)
+                                    );
+                                    return [...filtered, {
+                                        sender: 'clara',
+                                        text: 'I don\'t have that information available right now. Could you please rephrase your question?',
+                                        isFinal: true,
+                                        timestamp
+                                    }];
+                                });
+                                // Reset flags on error
+                                isCollegeQueryActiveRef.current = false;
+                                setIsCollegeQueryActive(false);
+                            });
+                            
+                            // Clear accumulators
+                            inputAccumRef.current = '';
+                            outputAccumRef.current = '';
+                            
+                            // Don't process Gemini response for college queries
+                            return updated;
+                        } else {
+                            // Not a college query - reset flags
+                            isCollegeQueryActiveRef.current = false;
+                            setIsCollegeQueryActive(false);
+                        }
+                        
+                        // Check for location queries in user message
+                        const locationResult = locationMatcher.extractLocationIntent(userText);
+                        if (locationResult.location && locationResult.intent === 'navigate') {
+                            const location = locationResult.location;
+                            const responseText = `The ${location.name} is on the ${location.floor_name}. ${location.description} I'll show you the way on the map.`;
+                            
+                            // Add Clara's response with map
+                            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            updated.push({
+                                sender: 'clara',
+                                text: responseText,
+                                isFinal: true,
+                                timestamp,
+                                hasMap: true,
+                                locationData: location
+                            });
+                            
+                            // Show map
+                            setCurrentLocation(location);
+                            setCurrentFloor(location.floor);
+                            setShowMap(true);
+                        }
                     }
-                    // Finalize last Clara message
+                    // Finalize last Clara message (only if not a college query)
                     let lastClaraIndex = -1;
                     for (let i = updated.length - 1; i >= 0; i--) {
-                        if (updated[i].sender === 'clara' && !updated[i].isFinal) { lastClaraIndex = i; break; }
+                        if (updated[i].sender === 'clara' && !updated[i].isFinal && !updated[i].isCollegeAI) { 
+                            lastClaraIndex = i; 
+                            break; 
+                        }
                     }
                     if (lastClaraIndex >= 0) {
                         updated[lastClaraIndex] = { ...updated[lastClaraIndex], text: outputAccumRef.current || updated[lastClaraIndex].text, isFinal: true };
@@ -661,34 +1585,17 @@ const App = () => {
             }
 
             // Handle audio playback - process immediately without delay
+            // Skip audio playback for College AI responses (they use TTS/Zephyr voice instead)
+            // Also skip if TTS is currently speaking or if there are active audio sources
             const base64EncodedAudioString = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
-            if (base64EncodedAudioString) {
+            const isTTSActive = window.speechSynthesis && window.speechSynthesis.speaking;
+            const hasActiveAudio = sourcesRef.current.size > 0 || (nextStartTimeRef.current > 0 && outputAudioContextRef.current && nextStartTimeRef.current > outputAudioContextRef.current.currentTime);
+            
+            // Play AI audio if available and not in demo mode
+            if (base64EncodedAudioString && !isDemoMode && !isCollegeQueryActive && !isCollegeQueryActiveRef.current && !isTTSActive && !hasActiveAudio) {
                 setStatus('Responding...');
                 
                 try {
-                    // Ensure audio context is running
-                    if (!outputAudioContextRef.current || outputAudioContextRef.current.state === 'closed') {
-                        outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-                        outputNodeRef.current = outputAudioContextRef.current.createGain();
-                        outputNodeRef.current.connect(outputAudioContextRef.current.destination);
-                        outputNodeRef.current.gain.value = 1.0;
-                    }
-                    
-                    // Resume if suspended (critical for audio playback)
-                    if (outputAudioContextRef.current.state === 'suspended') {
-                        try {
-                            await outputAudioContextRef.current.resume();
-                            console.log('Audio context resumed for playback');
-                        } catch (resumeError) {
-                            console.error('Error resuming audio context for playback:', resumeError);
-                            // Try to create new context if resume fails
-                            outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-                            outputNodeRef.current = outputAudioContextRef.current.createGain();
-                            outputNodeRef.current.connect(outputAudioContextRef.current.destination);
-                            outputNodeRef.current.gain.value = 1.0;
-                        }
-                    }
-                    
                     const decodedAudio = decode(base64EncodedAudioString);
                     const audioBuffer = await decodeAudioData(decodedAudio, outputAudioContextRef.current, 24000, 1);
 
@@ -710,90 +1617,103 @@ const App = () => {
                         // Clear nextStartTime if all sources are done
                         if (sourcesRef.current.size === 0) {
                             nextStartTimeRef.current = 0;
-                            // Update status when audio is done
-                            if (!isRecordingRef.current) {
-                                setStatus('Click the microphone to speak');
-                            }
                         }
                     };
                 } catch (error) {
                     console.error('Error processing audio:', error);
-                    setStatus('Audio playback error. Click mic to try again.');
                 }
+            } else if (isCollegeQueryActive || isCollegeQueryActiveRef.current || isTTSActive || hasActiveAudio) {
+                // When TTS is active, or when Zephyr audio is playing, skip AI audio playback
+                // Zephyr voice takes priority
+                // NOTE: This only affects audio OUTPUT playback, NOT voice INPUT recognition
+                // Users can still speak and be recognized even when audio is playing
+                if (isTTSActive) {
+                    console.log('Skipping AI audio playback - TTS is currently speaking (voice input still works)');
+                } else if (hasActiveAudio) {
+                    console.log('Skipping AI audio playback - Zephyr audio is currently playing (voice input still works)');
+                }
+                // Only update status if not currently recording
+                if (!isRecordingRef.current) {
+                    setStatus('Click the microphone to speak');
+                }
+            } else if (message.serverContent?.turnComplete && outputAccumRef.current && !isCollegeQueryActive && !isCollegeQueryActiveRef.current) {
+                // If no AI audio and turn is complete, use TTS as fallback
+                setTimeout(() => {
+                    const responseText = outputAccumRef.current?.trim() || '';
+                    if (responseText) {
+                        console.log('[TTS] Using TTS fallback for response');
+                        // Use TTS with detected language
+                        speakWithTTS(responseText, detectedLanguage);
+                    }
+                }, 100);
             }
         };
     };
 
     // Helper function to initialize session
     const initializeSession = async (shouldGreet = false) => {
-        // Check if we have preChatDetails before attempting to initialize
-        if (!preChatDetails) {
-            console.warn('Cannot initialize session: preChatDetails missing');
-            throw new Error('Session initialization requires user details. Please complete the pre-chat form.');
+        // Simple check - if session exists, reuse it
+        if (sessionPromiseRef.current) {
+            return;
+        }
+
+        // Try multiple ways to get the API key
+        const apiKey = process.env.API_KEY || 
+                      import.meta.env.VITE_API_KEY || 
+                      import.meta.env.VITE_GEMINI_API_KEY ||
+                      'AIzaSyABTSkPg0qPKX3aH9pOMbXtX_BQo32O8Hg';
+        
+        // Check if we're in demo mode (only if no API key at all, not if using fallback)
+        const hasValidApiKey = apiKey && apiKey.trim() !== '' && apiKey !== 'undefined';
+        if (!hasValidApiKey) {
+            console.warn('API Key not found, entering demo mode');
+            setIsDemoMode(true);
+            // In demo mode, show a message but don't initialize session
+            if (shouldGreet) {
+                const greetingText = preChatDetailsRef.current?.name 
+                    ? `Hi ${preChatDetailsRef.current.name}! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?`
+                    : "Hi there! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?";
+                setMessages([{ sender: 'clara', text: greetingText, isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
+                setStatus('Demo mode: Click the microphone to speak or use the demo call button.');
+            }
+            return;
+        } else {
+            setIsDemoMode(false);
         }
         
-        // Clear any existing session first
-        isIntentionallyClosingRef.current = true; // Mark as intentional to prevent reconnection loop
-        if (sessionPromiseRef.current) {
-            try {
-                const oldSession = await sessionPromiseRef.current;
-                if (oldSession) {
-                    oldSession.close().catch(console.error);
-                }
-            } catch (error) {
-                console.error('Error closing old session:', error);
-            }
-            sessionPromiseRef.current = null;
-        }
-        isIntentionallyClosingRef.current = false; // Reset after cleanup
-
-        // Reset accumulators
-        inputAccumRef.current = '';
-        outputAccumRef.current = '';
-
-        // Get user details first (needed for error messages)
-        const { name, purpose, staffShortName } = preChatDetails || {};
-
-        // Validate API key first
-        if (!process.env.API_KEY) {
-            const errorMsg = 'Gemini API key is missing. Please set GEMINI_API_KEY in your .env file.';
-            console.error(errorMsg);
-            setStatus(errorMsg);
-            if (shouldGreet) {
-                const greetingText = name 
-                    ? `Hi ${name}! I'm Clara, but I'm having trouble connecting. Please check the API key configuration.`
-                    : "Hi there! I'm Clara, but I'm having trouble connecting. Please check the API key configuration.";
-                setMessages([{ sender: 'clara', text: greetingText, isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
-            }
-            throw new Error(errorMsg);
-        }
-
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        console.log('Using API Key:', apiKey.substring(0, 10) + '...');
+        const ai = new GoogleGenAI({ apiKey });
         
         if (!outputAudioContextRef.current || outputAudioContextRef.current.state === 'closed') {
             outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         }
-        
-        // Resume audio context if suspended (required after user interaction)
-        if (outputAudioContextRef.current.state === 'suspended') {
-            try {
-                await outputAudioContextRef.current.resume();
-            } catch (error) {
-                console.error('Error resuming audio context:', error);
-            }
-        }
-        
         if (!outputNodeRef.current) {
             outputNodeRef.current = outputAudioContextRef.current.createGain();
             outputNodeRef.current.connect(outputAudioContextRef.current.destination);
             outputNodeRef.current.gain.value = 1.0;
         }
+
+        const { name, purpose, staffShortName } = preChatDetailsRef.current || {};
         const selectedStaff = staffList.find(s => s.shortName === staffShortName);
         const staffHint = selectedStaff ? `${selectedStaff.name} (${selectedStaff.shortName})` : 'Not specified';
+        
+        // Detect current language from recent user messages
+        const recentUserMessages = messages.filter(m => m.sender === 'user').slice(-3);
+        const allUserText = recentUserMessages.map(m => m.text).join(' ') || '';
+        const currentLang = detectLanguage(allUserText || inputAccumRef.current || '');
+        if (currentLang !== detectedLanguage && currentLang !== 'en') {
+            setDetectedLanguage(currentLang);
+        }
         
         const systemInstruction = `**PRIMARY DIRECTIVE: You MUST detect the user's language and respond ONLY in that same language. This is a strict requirement.**
 
 You are CLARA, the official, friendly, and professional AI receptionist for Sai Vidya Institute of Technology (SVIT). Your goal is to assist users efficiently. Keep your spoken responses concise and to the point to ensure a fast, smooth conversation.
+
+**LANGUAGE DETECTION:** Always respond in the same language the user uses. If the user speaks in Telugu, respond in Telugu. If they speak in Hindi, respond in Hindi. If they speak in English, respond in English. Match their language exactly.
+
+**IMPORTANT: College Query Detection**
+- If the user asks about college-related topics (admissions, fees, departments, faculty, placements, events, campus, courses, etc.), the system will automatically route to College AI for detailed information.
+- For non-college queries, continue with normal AI assistance.
 
 **Caller Information (Context):**
 - Name: ${name || 'Unknown'}
@@ -813,7 +1733,7 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
     - VR: Prof. Vidyashree R
     - BA: Dr. Bhavana A
     - BTN: Prof. Bhavya T N
-2.  **College Information:** Answer questions about admissions, fees, placements, facilities, departments, and general college info.
+2.  **College Information:** For detailed college information (admissions, fees, departments, etc.), the system will automatically switch to College AI to provide comprehensive answers.
 3.  **Actions:**
     - If the user expresses a clear intent to start a video call or meet with a specific staff member (e.g., 'call Anitha', 'I want to see Prof. Lakshmi'), you MUST use the \`initiateVideoCall\` tool. Do not just confirm; use the tool directly.
     - If asked about schedules or availability, offer to check.
@@ -822,284 +1742,131 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
         
         const messageHandler = createMessageHandler();
         
-        let greetingSent = false;
-        const greetingText = name 
-            ? `Hi ${name}! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?`
-            : "Hi there! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?";
-        
         sessionPromiseRef.current = ai.live.connect({
             model: 'gemini-2.5-flash-native-audio-preview-09-2025',
             callbacks: {
                 onopen: async () => {
                     setStatus('Clara is ready!');
                     
-                    // Resume output audio context for greeting playback
-                    if (outputAudioContextRef.current && outputAudioContextRef.current.state === 'suspended') {
-                        try {
-                            await outputAudioContextRef.current.resume();
-                        } catch (error) {
-                            console.error('Error resuming audio context for greeting:', error);
-                        }
-                    }
-                    
                     // Send greeting if requested
-                    if (shouldGreet && !greetingSent) {
-                        greetingSent = true;
+                    if (shouldGreet) {
+                        const greetingText = name 
+                            ? `Hi ${name}! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?`
+                            : "Hi there! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?";
+                        
                         try {
-                            const session = await sessionPromiseRef.current;
-                            if (session) {
+                            if (sessionPromiseRef.current) {
+                                const session = await sessionPromiseRef.current;
                                 // Send as text input to trigger audio response
-                                session.sendRealtimeInput({ text: greetingText });
-                                // Also add text greeting immediately so user sees it
-                                setMessages(prev => {
-                                    const exists = prev.some(msg => msg.sender === 'clara' && msg.text === greetingText);
-                                    if (!exists) {
-                                        return [...prev, { sender: 'clara', text: greetingText, isFinal: false, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }];
-                                    }
-                                    return prev;
-                                });
+                                if (session) {
+                                    session.sendRealtimeInput({ text: greetingText });
+                                }
+                            } else {
+                                // Fallback to text message if session not ready
+                                setMessages([{ sender: 'clara', text: greetingText, isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
                             }
                         } catch (error) {
                             console.error('Error sending greeting:', error);
-                            // Fallback to text message - ensure it's added
-                            setMessages(prev => {
-                                const exists = prev.some(msg => msg.sender === 'clara' && msg.text === greetingText);
-                                if (!exists) {
-                                    return [...prev, { sender: 'clara', text: greetingText, isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }];
-                                }
-                                return prev;
-                            });
+                            // Fallback to text message - silently handle error
+                            setMessages([{ sender: 'clara', text: greetingText, isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
                         }
                     }
                 },
                 onmessage: messageHandler,
                 onerror: (e) => {
-                    console.error('Session error:', e);
-                    const errorMessage = e.message || 'Session error occurred';
-                    
-                    // Check for API key errors
-                    if (errorMessage.includes('API key') || errorMessage.includes('authentication') || errorMessage.includes('401') || errorMessage.includes('403')) {
-                        setStatus('API key error. Please check your GEMINI_API_KEY in .env file.');
-                        sessionPromiseRef.current = null;
-                        isRecordingRef.current = false;
-                        setIsRecording(false);
-                        return;
-                    }
-                    
-                    // Check if it's a session expiration error
-                    if (errorMessage.includes('expired') || errorMessage.includes('timeout') || errorMessage.includes('closed')) {
-                        if (!isReconnectingRef.current && reconnectAttemptsRef.current < maxReconnectAttempts && preChatDetails) {
-                            reconnectAttemptsRef.current++;
-                            setStatus('Reconnecting...');
-                            isReconnectingRef.current = true;
-                            // Auto-reconnect after a short delay
-                            setTimeout(() => {
-                                const wasGreeting = shouldGreet;
-                                sessionPromiseRef.current = null;
-                                initializeSession(wasGreeting).then(() => {
-                                    isReconnectingRef.current = false;
-                                    reconnectAttemptsRef.current = 0; // Reset on success
-                                    setStatus('Clara is ready!');
-                                }).catch(err => {
-                                    console.error('Failed to reconnect:', err);
-                                    isReconnectingRef.current = false;
-                                    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-                                        setStatus('Connection failed. Click mic to retry.');
-                                    } else {
-                                        setStatus('Connection issue. Click mic to retry.');
-                                    }
-                                });
-                            }, 1000);
-                        } else if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-                            setStatus('Connection failed. Click mic to retry.');
-                        }
+                    console.error('[Session] Error:', e);
+                    // Don't close session on error - try to recover
+                    setStatus(`Error: ${e.message}. Please try speaking again.`);
+                    // Only close if it's a critical error
+                    if (e.message?.includes('closed') || e.message?.includes('disconnected')) {
+                        stopRecording(true);
                     } else {
-                        // Don't show error status for minor errors - keep session active
-                        console.warn('Session error (non-fatal):', errorMessage);
-                        // Don't change status - let user continue
+                        // For other errors, keep session alive and let user retry
+                        stopRecording(false);
                     }
-                    // Don't close session on error - let it try to recover
                 },
-                onclose: (event) => {
-                    console.log('Session closed:', event);
-                    
-                    // Don't reconnect if:
-                    // 1. Already reconnecting (error handler is managing it)
-                    // 2. Session was intentionally closed
-                    // 3. No preChatDetails (can't initialize without user info)
-                    // 4. Max reconnect attempts reached
-                    if (isReconnectingRef.current || isIntentionallyClosingRef.current) {
-                        return;
-                    }
-                    
-                    // Only auto-reconnect if we have valid context and haven't exceeded retry limit
-                    if (preChatDetails && reconnectAttemptsRef.current < maxReconnectAttempts) {
-                        reconnectAttemptsRef.current++;
-                        setStatus('Reconnecting...');
-                        isReconnectingRef.current = true;
-                        
-                        setTimeout(() => {
-                            const wasGreeting = false; // Don't re-send greeting on reconnect
-                            sessionPromiseRef.current = null;
-                            initializeSession(wasGreeting).then(() => {
-                                isReconnectingRef.current = false;
-                                reconnectAttemptsRef.current = 0; // Reset on success
-                                setStatus('Clara is ready!');
-                            }).catch(err => {
-                                console.error('Failed to reconnect:', err);
-                                isReconnectingRef.current = false;
-                                if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
-                                    setStatus('Connection failed. Click mic to retry.');
-                                    reconnectAttemptsRef.current = 0; // Reset so user can manually retry
-                                } else {
-                                    setStatus('Reconnecting...');
-                                }
-                            });
-                        }, 1000);
-                    } else {
-                        // No more reconnection attempts or missing context
-                        setStatus('Session ended. Click mic to start again.');
-                        reconnectAttemptsRef.current = 0; // Reset so user can manually retry
+                onclose: () => {
+                    // Session closed - clear reference so it can be recreated on next mic click
+                    console.log('[Session] Session closed, will be recreated on next mic click');
+                    sessionPromiseRef.current = null;
+                    // Don't show error - user can click mic to reconnect
+                    if (!isRecordingRef.current) {
+                        setStatus('Click the microphone to speak');
                     }
                 },
             },
             config: {
                 responseModalities: [Modality.AUDIO],
-                speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } },
+                speechConfig: { 
+                    voiceConfig: { 
+                        prebuiltVoiceConfig: { 
+                            voiceName: 'Zephyr'
+                        } 
+                    } 
+                },
                 systemInstruction: systemInstruction,
-                inputAudioTranscription: {
-                    // Enable transcription for any language
-                    languageCode: 'auto', // Auto-detect language
-                    model: 'latest_long',
-                },
-                outputAudioTranscription: {
-                    // Enable transcription for Clara's responses
-                    languageCode: 'auto',
-                    model: 'latest_long',
-                },
+                inputAudioTranscription: {},
+                outputAudioTranscription: {},
                 tools: [{ functionDeclarations: [initiateVideoCallFunction] }],
             },
         });
-        
-        // Wait for session to be ready and send greeting if needed
-        try {
-            await sessionPromiseRef.current;
-        } catch (error) {
-            console.error('Session initialization failed:', error);
-            // If session fails, show text greeting
-            if (shouldGreet) {
-                setMessages(prev => {
-                    const exists = prev.some(msg => msg.sender === 'clara' && msg.text === greetingText);
-                    if (!exists) {
-                        return [...prev, { sender: 'clara', text: greetingText, isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }];
-                    }
-                    return prev;
-                });
-            }
-            throw error;
-        }
     };
 
     const handleStartConversation = async (details) => {
         setPreChatDetails(details);
+        // Immediately update ref so it's available synchronously before initializeSession
+        preChatDetailsRef.current = details;
         setShowPreChatModal(false);
         
-        // Reset reconnect attempts when starting fresh
-        reconnectAttemptsRef.current = 0;
-        
-        // Show loading status
-        setStatus('Connecting to Clara...');
-        
-        // Initialize session and send greeting with retry logic
-        let retries = 0;
-        const maxRetries = 3;
-        
-        while (retries < maxRetries) {
-            try {
-                await initializeSession(true); // true = send greeting
-                setStatus('Clara is ready!');
-                reconnectAttemptsRef.current = 0; // Reset on successful initialization
-                break; // Success, exit retry loop
-            } catch (error) {
-                console.error(`Error initializing greeting (attempt ${retries + 1}):`, error);
-                retries++;
-                
-                if (retries >= maxRetries) {
-                    // Final fallback - show text greeting
-                    const welcomeText = details.name 
-                        ? `Hi ${details.name}! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?` 
-                        : "Hi there! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?";
-                    
-                    setMessages(prev => {
-                        const exists = prev.some(msg => msg.sender === 'clara' && msg.text === welcomeText);
-                        if (!exists) {
-                            return [...prev, { sender: 'clara', text: welcomeText, isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }];
-                        }
-                        return prev;
-                    });
-                    setStatus('Ready to chat (text mode)');
-                } else {
-                    // Wait before retrying
-                    await new Promise(resolve => setTimeout(resolve, 1000 * retries));
-                }
-            }
+        // Initialize session and send greeting
+        try {
+            await initializeSession(true); // true = send greeting
+        } catch (error) {
+            console.error('Error initializing greeting:', error);
+            // Fallback to text greeting if audio fails
+            const welcomeText = details.name 
+                ? `Hi ${details.name}! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?` 
+                : "Hi there! I'm Clara, your friendly AI receptionist! I'm so excited to help you today! How can I assist you?";
+            setMessages([{ sender: 'clara', text: welcomeText, isFinal: true, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }]);
         }
     };
-    
-    const stopRecording = useCallback((closeSession = false) => {
-        // Default to false to keep session alive between interactions
-        if (!isRecordingRef.current) return; // Prevent multiple stops
-        
-        isRecordingRef.current = false;
-        setIsRecording(false);
-        setStatus('Click the microphone to speak');
-
-        if (streamRef.current) {
-            streamRef.current.getTracks().forEach(track => track.stop());
-            streamRef.current = null;
-        }
-        if (scriptProcessorRef.current) {
-            scriptProcessorRef.current.disconnect();
-            scriptProcessorRef.current = null;
-        }
-        if (mediaStreamSourceRef.current) {
-            mediaStreamSourceRef.current.disconnect();
-            mediaStreamSourceRef.current = null;
-        }
-        if (inputAudioContextRef.current && inputAudioContextRef.current.state !== 'closed') {
-            inputAudioContextRef.current.close().catch(console.error);
-            inputAudioContextRef.current = null;
-        }
-        
-        silenceStartRef.current = null;
-        
-        // Only close session if explicitly requested (e.g., when ending conversation or starting video call)
-        if (closeSession && sessionPromiseRef.current) {
-            isIntentionallyClosingRef.current = true; // Mark as intentional to prevent reconnection
-            sessionPromiseRef.current.then(session => {
-                session.close().catch(console.error);
-            }).catch(console.error);
-            sessionPromiseRef.current = null;
-            // Reset flag after a delay to allow close handler to see it
-            setTimeout(() => {
-                isIntentionallyClosingRef.current = false;
-            }, 100);
-        }
-    }, []);
 
     const handleEndCall = () => {
+        // Update callStore
+        callStore.endCall();
+        setToast({ type: 'ended', message: 'Call ended' });
+        
         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const staffName = videoCallTarget?.name || 'Staff';
-        setMessages(prev => [...prev, { sender: 'clara', text: `Video call with ${staffName} ended.`, isFinal: true, timestamp }]);
+        setMessages(prev => [...prev, { sender: 'clara', text: `Video call with ${staffName} ended. How can I assist you further?`, isFinal: true, timestamp }]);
         
         // Cleanup active call
         if (activeCall && unifiedCallService) {
+            // End call via CallService (cleans up peer connection and streams)
             unifiedCallService.endCall(activeCall.callId);
+        } else if (activeCall) {
+            // Fallback cleanup
+            if (activeCall.stream) {
+                activeCall.stream.getTracks().forEach(track => track.stop());
+            }
+            if (activeCall.remoteStream) {
+                activeCall.remoteStream.getTracks().forEach(track => track.stop());
+            }
         }
         
         setActiveCall(null);
         setView('chat');
         setVideoCallTarget(null);
+        
+        // Show end summary
+        setShowEndSummary(true);
+        
+        // Resume AI chat mode - ensure session is still active
+        if (sessionPromiseRef.current) {
+            setStatus('Clara is ready! Click the microphone to speak.');
+        } else {
+            setStatus('Click the microphone to speak');
+        }
     };
 
     const handleMicClick = async () => {
@@ -1108,16 +1875,31 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
             setStatus('Processing...');
             return;
         }
-        
-        // Reset reconnect attempts when user manually clicks mic (fresh attempt)
-        reconnectAttemptsRef.current = 0;
-        
-        // Resume audio context on user interaction (required for audio playback)
-        if (outputAudioContextRef.current && outputAudioContextRef.current.state === 'suspended') {
+
+        // Initialize session if it doesn't exist or verify it's still valid
+        let sessionValid = false;
+        if (sessionPromiseRef.current) {
             try {
-                await outputAudioContextRef.current.resume();
+                const session = await sessionPromiseRef.current;
+                // Check if session is still open and functional
+                if (session && typeof session.sendRealtimeInput === 'function') {
+                    sessionValid = true;
+                    console.log('[Mic] Using existing session for voice recognition');
+                }
             } catch (error) {
-                console.error('Error resuming audio context:', error);
+                console.log('[Mic] Session check failed, will reinitialize:', error);
+                sessionPromiseRef.current = null;
+            }
+        }
+
+        if (!sessionValid) {
+            try {
+                console.log('[Mic] Initializing new session for voice recognition...');
+                await initializeSession(false);
+            } catch (error) {
+                console.error('[Mic] Failed to initialize session:', error);
+                setStatus('Failed to connect. Please try again.');
+                return;
             }
         }
         
@@ -1126,166 +1908,343 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
         setStatus('Listening...');
 
         try {
-            // Initialize session if it doesn't exist (reuses existing session from greeting)
-            if (!sessionPromiseRef.current) {
-                if (!preChatDetails) {
-                    setStatus('Please complete the pre-chat form first.');
-                    isRecordingRef.current = false;
-                    setIsRecording(false);
-                    return;
-                }
-                await initializeSession(false); // false = don't send greeting
-                reconnectAttemptsRef.current = 0; // Reset on successful initialization
-            }
+            console.log('[Mic] Starting audio capture...');
             
-            // Update status when session is ready
-            if (sessionPromiseRef.current) {
-                try {
-                    const session = await sessionPromiseRef.current;
-                    if (session) {
-                        setStatus('Listening...');
-                    } else {
-                        throw new Error('Session not available');
-                    }
-                } catch (err) {
-                    console.error('Error in session:', err);
-                    // Try to reinitialize
-                    sessionPromiseRef.current = null;
-                    await initializeSession(false);
-                    setStatus('Listening...');
-                }
-            } else {
-                // No session, create one
-                await initializeSession(false);
-                setStatus('Listening...');
-            }
-            
-            // Ensure input audio context exists and is ready
             if (!inputAudioContextRef.current || inputAudioContextRef.current.state === 'closed') {
-                try {
-                    inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
-                } catch (error) {
-                    console.error('Error creating input audio context:', error);
-                    throw new Error('Failed to initialize audio. Please allow microphone access.');
-                }
-            }
-            
-            // Resume input audio context if suspended
-            if (inputAudioContextRef.current.state === 'suspended') {
-                try {
-                    await inputAudioContextRef.current.resume();
-                } catch (error) {
-                    console.error('Error resuming input audio context:', error);
-                    throw new Error('Audio context blocked. Please interact with the page.');
-                }
+                inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+                console.log('[Mic] Created new audio context');
             }
 
-            // Get user media
+            console.log('[Mic] Requesting microphone access...');
             streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+            console.log('[Mic] Microphone access granted, setting up audio processing...');
+            mediaStreamSourceRef.current = inputAudioContextRef.current.createMediaStreamSource(streamRef.current);
             
-            // Verify audio context is still valid before creating media stream source
-            if (!inputAudioContextRef.current || inputAudioContextRef.current.state === 'closed') {
-                throw new Error('Audio context is not available');
-            }
+            // Use AnalyserNode for silence detection (no deprecation warnings)
+            analyserRef.current = inputAudioContextRef.current.createAnalyser();
+            analyserRef.current.fftSize = 2048;
+            analyserRef.current.smoothingTimeConstant = 0.8;
+            mediaStreamSourceRef.current.connect(analyserRef.current);
             
-            try {
-                mediaStreamSourceRef.current = inputAudioContextRef.current.createMediaStreamSource(streamRef.current);
-            } catch (error) {
-                console.error('Error creating media stream source:', error);
-                // Clean up stream if media source creation fails
-                if (streamRef.current) {
-                    streamRef.current.getTracks().forEach(track => track.stop());
-                    streamRef.current = null;
-                }
-                throw new Error('Failed to process audio input. Please try again.');
-            }
+            // Use ScriptProcessorNode for audio capture (required for Gemini API PCM format)
+            // Note: ScriptProcessorNode is deprecated but still functional and required for PCM output
             scriptProcessorRef.current = inputAudioContextRef.current.createScriptProcessor(4096, 1, 1);
             
-            const calculateRMS = (data) => {
+            const bufferLength = analyserRef.current.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            const calculateRMS = () => {
+                analyserRef.current.getByteTimeDomainData(dataArray);
                 let sum = 0;
-                for (let i = 0; i < data.length; i++) {
-                    sum += data[i] * data[i];
+                for (let i = 0; i < dataArray.length; i++) {
+                    const normalized = (dataArray[i] - 128) / 128;
+                    sum += normalized * normalized;
                 }
-                return Math.sqrt(sum / data.length);
+                return Math.sqrt(sum / dataArray.length);
             };
             
             silenceStartRef.current = null;
             
+            // Process audio with ScriptProcessorNode (for Gemini API PCM compatibility)
+            // Note: ScriptProcessorNode is deprecated but required for Gemini API PCM format
+            // This will continue to work but may show deprecation warnings in console
             scriptProcessorRef.current.onaudioprocess = (audioProcessingEvent) => {
+                if (!isRecordingRef.current) return;
+                
                 const inputData = audioProcessingEvent.inputBuffer.getChannelData(0);
                 
+                // Convert to PCM blob for Gemini API
                 const pcmBlob = createBlob(inputData);
                 if (sessionPromiseRef.current) {
                     sessionPromiseRef.current.then((session) => {
-                        session.sendRealtimeInput({ media: pcmBlob });
-                    }).catch(err => console.error("Error sending audio:", err));
-                }
-
-                // Automatic stop on silence
-                const volume = calculateRMS(inputData);
-                const SILENCE_THRESHOLD = 0.01;
-                const SPEECH_TIMEOUT = 1200; // 1.2 seconds
-
-                if (volume > SILENCE_THRESHOLD) {
-                    silenceStartRef.current = null;
-                } else {
-                    if (silenceStartRef.current === null) {
-                        silenceStartRef.current = Date.now();
-                    } else if (Date.now() - silenceStartRef.current > SPEECH_TIMEOUT) {
-                        if (isRecordingRef.current) {
-                            stopRecording(false);
-                            setStatus('Processing...');
+                        // Check if session is still open before sending
+                        if (session && typeof session.sendRealtimeInput === 'function') {
+                            try {
+                                session.sendRealtimeInput({ media: pcmBlob });
+                                // Log first few successful sends for debugging (very infrequent)
+                                if (Math.random() < 0.01) { // Log ~1% of sends to avoid spam
+                                    console.log('[Audio] Successfully sending audio input to session');
+                                }
+                            } catch (err) {
+                                // Handle closed session gracefully
+                                if (err && err.message && !err.message.includes('closed')) {
+                                    console.error("[Audio] Error sending audio input:", err);
+                                }
+                            }
+                        } else {
+                            // Log when session is invalid (but not too frequently)
+                            if (Math.random() < 0.1) { // Log ~10% of the time
+                                console.warn('[Audio] Session is not available or sendRealtimeInput not available');
+                            }
                         }
+                    }).catch(err => {
+                        // Log session promise errors
+                        if (err && err.message && !err.message.includes('closed')) {
+                            console.error("[Audio] Session promise error:", err);
+                        }
+                    });
+                } else {
+                    // Log when session is missing (but not too frequently)
+                    if (Math.random() < 0.1) { // Log ~10% of the time
+                        console.warn('[Audio] No session available to send audio input - session may need to be reinitialized');
                     }
                 }
             };
-
-            // Verify audio context is still valid before connecting
-            if (!inputAudioContextRef.current || inputAudioContextRef.current.state === 'closed') {
-                throw new Error('Audio context is not available');
-            }
-
+            
+            // Connect ScriptProcessorNode
             mediaStreamSourceRef.current.connect(scriptProcessorRef.current);
             scriptProcessorRef.current.connect(inputAudioContextRef.current.destination);
+            
+            // Monitor silence using AnalyserNode (separate from audio capture to reduce warnings)
+            const checkSilence = () => {
+                if (!isRecordingRef.current) return;
+                
+                const volume = calculateRMS();
+                const SILENCE_THRESHOLD = 0.01;
+                const SPEECH_TIMEOUT = 2000; // Increased to 2 seconds to allow for natural pauses
+
+                if (volume > SILENCE_THRESHOLD) {
+                    // Speech detected - reset silence timer
+                    if (silenceStartRef.current !== null) {
+                        console.log('[Audio] Speech detected, resetting silence timer');
+                    }
+                    silenceStartRef.current = null;
+                } else {
+                    // Silence detected
+                    if (silenceStartRef.current === null) {
+                        silenceStartRef.current = Date.now();
+                    } else {
+                        const silenceDuration = Date.now() - silenceStartRef.current;
+                        if (silenceDuration > SPEECH_TIMEOUT) {
+                            console.log('[Audio] Silence timeout reached, stopping recording');
+                            if (isRecordingRef.current) {
+                                stopRecording(false);
+                                return;
+                            }
+                        }
+                    }
+                }
+                
+                requestAnimationFrame(checkSilence);
+            };
+            
+            checkSilence();
 
         } catch (error) {
             console.error('Error starting recording:', error);
-            setStatus(`Error: ${error.message || 'Failed to start recording'}`);
+            setStatus(`Error: ${error.message}`);
             isRecordingRef.current = false;
             setIsRecording(false);
-            
-            // Clean up any partial setup
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(track => track.stop());
-                streamRef.current = null;
-            }
-            if (mediaStreamSourceRef.current) {
-                try {
-                    mediaStreamSourceRef.current.disconnect();
-                } catch (e) {
-                    console.error('Error disconnecting media stream source:', e);
-                }
-                mediaStreamSourceRef.current = null;
-            }
-            if (scriptProcessorRef.current) {
-                try {
-                    scriptProcessorRef.current.disconnect();
-                } catch (e) {
-                    console.error('Error disconnecting script processor:', e);
-                }
-                scriptProcessorRef.current = null;
-            }
         }
     };
     
+    const handleWelcomeStart = () => {
+        setShowWelcomeScreen(false);
+        setShowPreChatModal(true);
+    };
+
+    // Handle call confirmation
+    const handleConfirmCall = useCallback(async () => {
+        if (!pendingCall?.staff) return;
+        
+        setShowCallConfirmation(false);
+        const staffToCall = pendingCall.staff;
+        setPendingCall(null);
+        
+        // Now start the actual call
+        await startCallAfterConfirmation(staffToCall);
+    }, [pendingCall, startCallAfterConfirmation]);
+
+    const handleCancelCall = useCallback(() => {
+        setShowCallConfirmation(false);
+        setPendingCall(null);
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setMessages(prev => [...prev, { sender: 'clara', text: 'Call cancelled.', isFinal: true, timestamp }]);
+    }, []);
+    
+    // Call Confirmation Dialog Component
+    const CallConfirmationDialog = () => {
+        if (!showCallConfirmation || !pendingCall?.staff) return null;
+        
+        return (
+            <div className="modal-overlay" style={{ 
+                position: 'fixed', 
+                top: 0, 
+                left: 0, 
+                right: 0, 
+                bottom: 0, 
+                backgroundColor: 'rgba(0, 0, 0, 0.7)', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                zIndex: 10000 
+            }}>
+                <div className="modal-content" style={{ 
+                    backgroundColor: 'white', 
+                    padding: '30px', 
+                    borderRadius: '12px', 
+                    maxWidth: '400px', 
+                    width: '90%',
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
+                }}>
+                    <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                        <VideoCallHeaderIcon size={48} />
+                        <h2 style={{ marginTop: '15px', marginBottom: '10px', fontSize: '20px', fontWeight: '600' }}>
+                            Start Video Call?
+                        </h2>
+                        <p style={{ color: '#666', fontSize: '14px' }}>
+                            Would you like to start a video call with <strong>{pendingCall.staff.name}</strong>?
+                        </p>
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+                        <button 
+                            onClick={handleCancelCall}
+                            style={{
+                                padding: '12px 24px',
+                                borderRadius: '8px',
+                                border: '1px solid #ddd',
+                                backgroundColor: 'white',
+                                color: '#333',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: '500'
+                            }}
+                        >
+                            Cancel
+                        </button>
+                        <button 
+                            onClick={handleConfirmCall}
+                            style={{
+                                padding: '12px 24px',
+                                borderRadius: '8px',
+                                border: 'none',
+                                backgroundColor: '#6964D9',
+                                color: 'white',
+                                cursor: 'pointer',
+                                fontSize: '14px',
+                                fontWeight: '500'
+                            }}
+                        >
+                            Yes, Start Call
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     const renderContent = () => {
+        if (showWelcomeScreen) {
+            return <WelcomeScreen onStartConversation={handleWelcomeStart} />;
+        }
         if (showPreChatModal) {
             return <PreChatModal onStart={handleStartConversation} />;
         }
-        if (view === 'video_call' && videoCallTarget) {
-            return <VideoCallView staff={videoCallTarget} onEndCall={handleEndCall} activeCall={activeCall} />;
+        if (view === 'video_call' && videoCallTarget && activeCall) {
+            console.log('[Client] Rendering video call view');
+            console.log('[Client] activeCall:', activeCall);
+            console.log('[Client] unifiedCallService:', !!unifiedCallService);
+            
+            // Get latest call data from CallService
+            const callData = unifiedCallService?.getActiveCall(activeCall.callId);
+            console.log('[Client] callData from service:', callData);
+            
+            const webrtcCall = callData ? {
+                pc: callData.pc,
+                stream: callData.stream,
+                remoteStream: callData.remoteStream,
+            } : (activeCall.pc ? {
+                pc: activeCall.pc,
+                stream: activeCall.stream!,
+                remoteStream: activeCall.remoteStream || null,
+            } : null);
+            
+            console.log('[Client] webrtcCall:', webrtcCall);
+            
+            // Use new CallRoom component if callStore is in_call, otherwise use old WebRTCVideoCall for compatibility
+            if (callStore.state === 'in_call' && callStore.callData.localStream) {
+                console.log('[Client] Rendering new CallRoom component');
+                return (
+                    <>
+                        <CallRoom onEndCall={handleEndCall} />
+                        {toast && (
+                            <CallToast
+                                type={toast.type}
+                                message={toast.message}
+                                onDismiss={() => setToast(null)}
+                                duration={3000}
+                            />
+                        )}
+                    </>
+                );
+            } else if (webrtcCall && webrtcCall.pc) {
+                console.log('[Client] Rendering WebRTCVideoCall component (legacy)');
+                return (
+                    <>
+                        <WebRTCVideoCall
+                            callId={activeCall.callId}
+                            staffName={videoCallTarget.name}
+                            onEndCall={handleEndCall}
+                            activeCall={webrtcCall}
+                            onRemoteStreamUpdate={(remoteStream) => {
+                                console.log('[Client] Remote stream updated in WebRTCVideoCall');
+                                // Update activeCall state when remote stream arrives
+                                setActiveCall(prev => prev ? {
+                                    ...prev,
+                                    remoteStream,
+                                } : null);
+                                // Also update in CallService
+                                if (unifiedCallService) {
+                                    const callData = unifiedCallService.getActiveCall(activeCall.callId);
+                                    if (callData) {
+                                        callData.remoteStream = remoteStream;
+                                    }
+                                }
+                                // Update callStore
+                                callStore.setInCall({ remoteStream });
+                            }}
+                        />
+                        {toast && (
+                            <CallToast
+                                type={toast.type}
+                                message={toast.message}
+                                onDismiss={() => setToast(null)}
+                                duration={3000}
+                            />
+                        )}
+                    </>
+                );
+            }
+            // Fallback: show connecting message
+            console.log('[Client] No webrtcCall yet, showing connecting message');
+            return (
+                <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+                    <div className="text-white text-xl">Connecting to {videoCallTarget.name}...</div>
+                    <div className="text-white text-sm mt-4">Call ID: {activeCall.callId}</div>
+                </div>
+            );
         }
         return (
+            <>
+                <CallConfirmationDialog />
+                {/* Device Permission Prompt */}
+                <DevicePermissionPrompt
+                    visible={showPermissionPrompt}
+                    onPermissionsGranted={handlePermissionGranted}
+                    onCancel={() => {
+                        setShowPermissionPrompt(false);
+                        callStore.reset();
+                        setPendingCallStaff(null);
+                    }}
+                />
+                {/* Call End Summary */}
+                <CallEndSummary
+                    visible={showEndSummary}
+                    onClose={() => {
+                        setShowEndSummary(false);
+                        callStore.reset();
+                    }}
+                />
             <div className="app-container">
                 <div className="header">
                      <div className="header-left">
@@ -1293,13 +2252,23 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                         <span>Clara</span>
                     </div>
                     <div className="header-right">
-                        <div className="header-button college-demo">
-                            <GraduationCapIcon />
-                            <span>College Demo</span>
-                        </div>
                         <div className="header-button staff-login">
                             <StaffLoginIcon />
                             <span>Staff Login</span>
+                        </div>
+                        <div 
+                            className="header-button map-button" 
+                            onClick={() => {
+                                setShowMap(!showMap);
+                                if (!showMap && !currentLocation) {
+                                    // If no location selected, show ground floor
+                                    setCurrentFloor(0);
+                                }
+                            }}
+                            style={{ cursor: 'pointer' }}
+                        >
+                            <MapIcon />
+                            <span>{showMap ? 'Hide Map' : 'Show Map'}</span>
                         </div>
                         <div className="header-button video-call">
                             <VideoCallHeaderIcon />
@@ -1315,8 +2284,8 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                                         const result = await unifiedCallService.startCall({
                                             department: 'general',
                                             purpose: 'Client video call',
-                                            onAccepted: (callId, pc, stream) => {
-                                                console.log('Call accepted:', callId);
+                                            onAccepted: (callId, roomName) => {
+                                                console.log('Call accepted:', callId, roomName);
                                                 // Handle accepted call - could show video UI
                                                 setMessages(prev => [...prev, {
                                                     sender: 'clara',
@@ -1378,10 +2347,36 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                             </div>
                             <div className="message-content">
                                 <p>{msg.text}</p>
+                                {msg.hasMap && msg.locationData && (
+                                    <button 
+                                        className="btn-show-map"
+                                        onClick={() => {
+                                            setCurrentLocation(msg.locationData);
+                                            setCurrentFloor(msg.locationData.floor);
+                                            setShowMap(true);
+                                        }}
+                                    >
+                                        📍 Show on Map
+                                    </button>
+                                )}
                             </div>
                              <div className="timestamp">{msg.timestamp}</div>
                         </div>
                     ))}
+                    
+                    {/* Map Navigator (from remote) */}
+                    {showMap && (
+                        <div className="map-panel">
+                            <MapNavigator
+                                locationData={currentLocation}
+                                destinationPoint={currentLocation?.coordinates || null}
+                                currentFloor={currentFloor}
+                                onFloorChange={setCurrentFloor}
+                                onClose={() => setShowMap(false)}
+                            />
+                        </div>
+                    )}
+                    
                 </div>
 
                 <div className="footer">
@@ -1407,11 +2402,81 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                     </div>
                 </div>
             </div>
+            </>
                 );
     };
 
-        return <>{renderContent()}</>;
+        try {
+            return <>{renderContent()}</>;
+        } catch (error) {
+            console.error('Error in renderContent:', error);
+            return (
+                <div style={{ padding: '20px', textAlign: 'center' }}>
+                    <h2>Rendering Error</h2>
+                    <p>{error.message}</p>
+                </div>
+            );
+        }
 };
 
-const root = createRoot(document.getElementById('root'));
-root.render(<App />);
+// Error boundary wrapper
+const ErrorBoundary = ({ children }) => {
+    const [hasError, setHasError] = useState(false);
+    const [error, setError] = useState(null);
+
+    useEffect(() => {
+        const handleError = (event) => {
+            console.error('Global error:', event.error);
+            setError(event.error);
+            setHasError(true);
+        };
+        window.addEventListener('error', handleError);
+        return () => window.removeEventListener('error', handleError);
+    }, []);
+
+    if (hasError) {
+        return (
+            <div style={{ padding: '20px', textAlign: 'center' }}>
+                <h2>Something went wrong</h2>
+                <p>{error?.message || 'Unknown error'}</p>
+                <button onClick={() => window.location.reload()}>Reload Page</button>
+            </div>
+        );
+    }
+
+    return children;
+};
+
+// Wait for DOM to be ready before rendering
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        initializeApp();
+    });
+} else {
+    initializeApp();
+}
+
+function initializeApp() {
+    try {
+        const rootElement = document.getElementById('root');
+        if (!rootElement) {
+            throw new Error('Root element not found');
+        }
+        const root = createRoot(rootElement);
+        root.render(
+            <ErrorBoundary>
+                <App />
+            </ErrorBoundary>
+        );
+    } catch (error) {
+        console.error('Failed to render app:', error);
+        const rootElement = document.getElementById('root') || document.body;
+        rootElement.innerHTML = `
+            <div style="padding: 20px; text-align: center; font-family: Arial, sans-serif;">
+                <h2>Failed to load application</h2>
+                <p>${error.message}</p>
+                <button onclick="window.location.reload()" style="padding: 10px 20px; margin-top: 10px; cursor: pointer;">Reload Page</button>
+            </div>
+        `;
+    }
+}

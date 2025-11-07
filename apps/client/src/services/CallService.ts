@@ -17,10 +17,11 @@ interface CallICEEvent {
   candidate: RTCIceCandidateInit;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || 
-  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
+// Always use backend server port (8080), not the client dev server port
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const SOCKET_PATH = import.meta.env.VITE_SOCKET_PATH || '/socket';
-const ENABLE_UNIFIED = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true';
+// Always enable unified mode for WebRTC calls (required for presentation)
+const ENABLE_UNIFIED = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true' || true;
 
 export interface CallServiceOptions {
   apiBase?: string;
@@ -33,7 +34,7 @@ export class CallService {
   private apiBase: string;
   private token: string;
   private clientId: string;
-  private activeCalls: Map<string, { pc: RTCPeerConnection; stream: MediaStream }> = new Map();
+  private activeCalls: Map<string, { pc: RTCPeerConnection; stream: MediaStream; remoteStream: MediaStream | null }> = new Map();
 
   constructor({ apiBase = API_BASE, token, clientId }: CallServiceOptions) {
     this.apiBase = apiBase;
@@ -46,66 +47,6 @@ export class CallService {
       Authorization: `Bearer ${this.token}`,
       'Content-Type': 'application/json',
     };
-  }
-
-  private async ensureValidToken(): Promise<boolean> {
-    // Simply check if token exists and refresh proactively
-    // JWT tokens expire in 15 minutes, so we refresh if token is old
-    if (!this.token) {
-      return await this.refreshToken();
-    }
-    
-    // Check token expiration (refresh if expires in less than 5 minutes)
-    try {
-      const tokenData = JSON.parse(atob(this.token.split('.')[1]));
-      const timeUntilExpiry = tokenData.exp - (Date.now() / 1000);
-      // If token expires in less than 5 minutes (300 seconds), refresh it
-      if (timeUntilExpiry < 300) {
-        return await this.refreshToken();
-      }
-      return true;
-    } catch (error) {
-      // If token parsing fails, refresh it
-      console.error('Token validation error:', error);
-      return await this.refreshToken();
-    }
-  }
-
-  private async refreshToken(): Promise<boolean> {
-    try {
-      const apiBase = this.apiBase.replace(/\/api$/, '') || 
-        (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
-      
-      const res = await fetch(`${apiBase}/api/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: this.clientId,
-          role: 'client',
-        }),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to refresh token: ${res.statusText}`);
-      }
-
-      const data = await res.json();
-      if (data.token) {
-        this.token = data.token;
-        localStorage.setItem('clara-jwt-token', this.token);
-        
-        // Reconnect socket with new token
-        if (this.socket) {
-          this.socket.disconnect();
-          this.socket = null;
-        }
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('Failed to refresh token:', error);
-      return false;
-    }
   }
 
   private ensureSocket() {
@@ -130,55 +71,266 @@ export class CallService {
     targetStaffId?: string;
     department?: string;
     purpose?: string;
-    onAccepted?: (callId: string, pc: RTCPeerConnection, stream: MediaStream) => void;
+    onAccepted?: (callId: string, roomName: string) => void;
     onDeclined?: (reason?: string) => void;
     onError?: (error: Error) => void;
-  }): Promise<{ callId: string; pc: RTCPeerConnection; stream: MediaStream } | null> {
+  }): Promise<{ callId: string; roomName: string } | null> {
     if (!ENABLE_UNIFIED) {
       console.warn('Unified mode disabled');
       return null;
     }
 
     try {
-      // Ensure token is valid before making call
-      const tokenValid = await this.ensureValidToken();
-      if (!tokenValid) {
-        throw new Error('Authentication failed. Please refresh the page.');
-      }
-
-      // Initiate call
-      const res = await fetch(`${this.apiBase}/api/calls/initiate`, {
+      // Initiate call using new v1 API endpoint
+      let res = await fetch(`${this.apiBase}/api/v1/calls`, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({ clientId: this.clientId, targetStaffId, department, purpose }),
+        body: JSON.stringify({ clientId: this.clientId, targetStaffId, department, reason: purpose }),
       });
 
-      if (!res.ok) {
-        if (res.status === 401) {
-          // Token expired during call, try refreshing once more
-          const refreshed = await this.refreshToken();
-          if (refreshed) {
-            // Retry the call with new token
-            const retryRes = await fetch(`${this.apiBase}/api/calls/initiate`, {
+      // If 401, refresh token and retry
+      if (res.status === 401) {
+        console.log('[CallService] Token expired, refreshing...');
+        const refreshRes = await fetch(`${this.apiBase}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: this.clientId,
+            role: 'client',
+          }),
+        });
+        
+        if (refreshRes.ok) {
+          const data = await refreshRes.json();
+          if (data.token) {
+            this.token = data.token;
+            localStorage.setItem('clara-jwt-token', data.token);
+            console.log('[CallService] Token refreshed, retrying call...');
+            
+            // Retry with new token
+            res = await fetch(`${this.apiBase}/api/calls/initiate`, {
               method: 'POST',
               headers: this.getHeaders(),
               body: JSON.stringify({ clientId: this.clientId, targetStaffId, department, purpose }),
             });
-            if (!retryRes.ok) {
-              throw new Error(`Failed to initiate call: ${retryRes.statusText}`);
-            }
-            const retryData = await retryRes.json();
-            return await this.setupCallConnection(retryData.callId, onAccepted, onDeclined);
-          } else {
-            throw new Error('Authentication failed. Please refresh the page.');
           }
         }
-        const errorText = await res.text();
-        throw new Error(`Failed to initiate call: ${res.statusText} - ${errorText}`);
+      }
+
+      if (!res.ok) {
+        throw new Error(`Failed to initiate call: ${res.statusText}`);
       }
 
       const { callId } = await res.json();
-      return await this.setupCallConnection(callId, onAccepted, onDeclined);
+
+      // Join call room to listen for updates
+      const socket = this.ensureSocket();
+      socket.emit('join:call', { callId });
+      console.log('[CallService] Joined call room:', callId);
+      
+      // Wait a bit for room join to complete before sending offer
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Create peer connection for WebRTC with TURN/STUN configuration
+      const turnServerUrl = import.meta.env.VITE_TURN_SERVER_URL;
+      const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+      const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
+      
+      const iceServers: RTCIceServer[] = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ];
+      
+      // Add TURN server if configured
+      if (turnServerUrl) {
+        iceServers.push({
+          urls: turnServerUrl,
+          username: turnUsername,
+          credential: turnCredential,
+        });
+      }
+      
+      const pc = new RTCPeerConnection({
+        iceServers,
+        iceCandidatePoolSize: 10, // Pre-gather candidates for faster connection
+      });
+
+      // Get user media (permissions should already be granted from confirmation step)
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      let remoteStream: MediaStream | null = null;
+
+      // Handle ICE candidates - only send after local description is set
+      pc.onicecandidate = (e) => {
+        if (e.candidate && pc.localDescription) {
+          console.log('[CallService] Sending ICE candidate');
+          fetch(`${this.apiBase}/api/calls/ice`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ callId, from: this.clientId, candidate: e.candidate }),
+          }).catch(err => console.error('[CallService] Error sending ICE candidate:', err));
+        } else if (e.candidate) {
+          console.log('[CallService] ICE candidate generated but local description not set yet, will send later');
+        }
+      };
+
+      // Handle remote stream
+      pc.ontrack = (e) => {
+        console.log('Client received remote stream:', e.streams[0]);
+        if (e.streams && e.streams.length > 0) {
+          remoteStream = e.streams[0];
+          const callData = this.activeCalls.get(callId);
+          if (callData) {
+            callData.remoteStream = remoteStream;
+            // Trigger update by re-setting the call data
+            this.activeCalls.set(callId, { ...callData, remoteStream });
+          }
+        }
+      };
+
+      // Handle connection state changes
+      pc.onconnectionstatechange = () => {
+        console.log('Client peer connection state:', pc.connectionState);
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          console.warn('Client peer connection issue:', pc.connectionState);
+        }
+      };
+
+      // Create and send offer
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+      await pc.setLocalDescription(offer);
+      console.log('[CallService] Created and set local description (offer)');
+
+      // Send offer to server
+      const offerResponse = await fetch(`${this.apiBase}/api/calls/sdp`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({ callId, from: this.clientId, type: 'offer', sdp: offer.sdp }),
+      });
+      if (offerResponse.ok) {
+        console.log('[CallService] Offer sent successfully');
+      } else {
+        console.error('[CallService] Failed to send offer:', offerResponse.statusText);
+      }
+
+      // Store call state
+      const callState = {
+        callId,
+        targetStaffId,
+        purpose,
+        onAccepted,
+        onDeclined,
+        onError,
+        pc,
+        stream,
+        remoteStream,
+      };
+
+      // Listen for answer
+      const sdpHandler = async ({ type, sdp, callId: eventCallId }: CallSDPEvent & { callId?: string }) => {
+        // Only process if it's for this call
+        if (type === 'answer' && (!eventCallId || eventCallId === callId)) {
+          try {
+            console.log('[CallService] Received answer SDP, setting remote description...');
+            await pc.setRemoteDescription({ type: 'answer', sdp });
+            console.log('[CallService] ✅ Client set remote description (answer)');
+            remoteDescriptionSet = true;
+            // Process any queued ICE candidates
+            await processQueuedCandidates();
+            console.log('[CallService] Processed queued ICE candidates');
+          } catch (error) {
+            console.error('[CallService] Error handling answer:', error);
+          }
+        } else if (type === 'offer') {
+          console.log('[CallService] Received offer (unexpected for client), ignoring');
+        }
+      };
+
+      socket.on('call:sdp', sdpHandler);
+
+      // Queue for ICE candidates until remote description is set
+      const iceCandidateQueue: RTCIceCandidateInit[] = [];
+      let remoteDescriptionSet = false;
+
+      // Listen for ICE candidates
+      const iceHandler = async ({ candidate }: CallICEEvent) => {
+        if (!candidate || pc.signalingState === 'closed') return;
+        
+        // If remote description is not set yet, queue the candidate
+        if (!remoteDescriptionSet || pc.remoteDescription === null) {
+          console.log('[CallService] Queueing ICE candidate (remote description not set yet)');
+          iceCandidateQueue.push(candidate);
+          return;
+        }
+
+        // Remote description is set, add the candidate
+        try {
+          await pc.addIceCandidate(candidate);
+          console.log('[CallService] Added ICE candidate');
+        } catch (error) {
+          console.error('[CallService] Error adding ICE candidate:', error);
+        }
+      };
+
+      socket.on('call:ice', iceHandler);
+
+      // Process queued ICE candidates after remote description is set
+      const processQueuedCandidates = async () => {
+        if (remoteDescriptionSet && iceCandidateQueue.length > 0) {
+          console.log(`[CallService] Processing ${iceCandidateQueue.length} queued ICE candidates`);
+          for (const candidate of iceCandidateQueue) {
+            try {
+              await pc.addIceCandidate(candidate);
+            } catch (error) {
+              console.error('[CallService] Error adding queued ICE candidate:', error);
+            }
+          }
+          iceCandidateQueue.length = 0; // Clear the queue
+        }
+      };
+
+      // Listen for call updates
+      const updateHandler = async ({ state, reason }: CallUpdateEvent) => {
+        console.log('[CallService] Received call:update event:', { state, reason, callId });
+        if (state === 'declined') {
+          console.log('[CallService] Call declined, cleaning up...');
+          socket.off('call:update', updateHandler);
+          socket.off('call:sdp', sdpHandler);
+          socket.off('call:ice', iceHandler);
+          stream.getTracks().forEach(track => track.stop());
+          pc.close();
+          if (callState.onDeclined) callState.onDeclined(reason);
+        } else if (state === 'accepted') {
+          console.log('[CallService] Call accepted! Notifying client...');
+          // Staff accepted - notify with peer connection
+          // Update call data with current state
+          const currentCallData = this.activeCalls.get(callId);
+          if (currentCallData) {
+            this.activeCalls.set(callId, { ...currentCallData, remoteStream: currentCallData.remoteStream || null });
+          }
+          if (callState.onAccepted) {
+            console.log('[CallService] Calling onAccepted callback...');
+            callState.onAccepted(callId, callId); // Use callId as roomName for WebRTC
+          } else {
+            console.warn('[CallService] No onAccepted callback registered!');
+          }
+          // Don't remove the handler yet - we might need it for other updates
+        } else if (state === 'ringing') {
+          console.log('[CallService] Call is ringing...');
+        }
+      };
+
+      socket.on('call:update', updateHandler);
+
+      // Store call data
+      this.activeCalls.set(callId, { pc, stream, remoteStream: remoteStream || null });
+
+      // Return callId and peer connection info
+      return { callId, roomName: callId };
     } catch (error) {
       console.error('CallService.startCall error:', error);
       if (onError) onError(error as Error);
@@ -186,103 +338,23 @@ export class CallService {
     }
   }
 
-  private async setupCallConnection(
-    callId: string,
-    onAccepted?: (callId: string, pc: RTCPeerConnection, stream: MediaStream) => void,
-    onDeclined?: (reason?: string) => void
-  ): Promise<{ callId: string; pc: RTCPeerConnection; stream: MediaStream }> {
-    // Join call room
-    const socket = this.ensureSocket();
-    socket.emit('join:call', { callId });
-
-    // Create peer connection
-    const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-    });
-
-    // Get user media
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-    // Handle ICE candidates
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        fetch(`${this.apiBase}/api/calls/ice`, {
-          method: 'POST',
-          headers: this.getHeaders(),
-          body: JSON.stringify({ callId, from: this.clientId, candidate: e.candidate }),
-        }).catch(console.error);
-      }
-    };
-
-    // Handle remote stream
-    pc.ontrack = (e) => {
-      if (onAccepted) {
-        onAccepted(callId, pc, e.streams[0]);
-      }
-    };
-
-    // Listen for call updates
-    socket.on('call:update', ({ state, reason }: CallUpdateEvent) => {
-      if (state === 'declined') {
-        stream.getTracks().forEach((t) => t.stop());
-        pc.close();
-        this.activeCalls.delete(callId);
-        if (onDeclined) onDeclined(reason);
-      } else if (state === 'accepted') {
-        // Create and send offer
-        this.createOffer(callId, pc);
-      }
-    });
-
-    // Listen for SDP answer
-    socket.on('call:sdp', async ({ type, sdp }: CallSDPEvent) => {
-      if (type === 'answer') {
-        await pc.setRemoteDescription({ type: 'answer', sdp });
-      }
-    });
-
-    // Listen for ICE candidates
-    socket.on('call:ice', async ({ candidate }: CallICEEvent) => {
-      if (candidate) {
-        await pc.addIceCandidate(candidate);
-      }
-    });
-
-    this.activeCalls.set(callId, { pc, stream });
-
-    return { callId, pc, stream };
-  }
-
-  private async createOffer(callId: string, pc: RTCPeerConnection) {
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-
-      await fetch(`${this.apiBase}/api/calls/sdp`, {
-        method: 'POST',
-        headers: this.getHeaders(),
-        body: JSON.stringify({ callId, from: this.clientId, type: 'offer', sdp: offer.sdp }),
-      });
-    } catch (error) {
-      console.error('Failed to create offer:', error);
-    }
-  }
-
   endCall(callId: string) {
-    const call = this.activeCalls.get(callId);
-    if (call) {
-      call.stream.getTracks().forEach((t) => t.stop());
-      call.pc.close();
-      this.activeCalls.delete(callId);
+    const callData = this.activeCalls.get(callId);
+    if (callData) {
+      callData.stream.getTracks().forEach(track => track.stop());
+      if (callData.remoteStream) {
+        callData.remoteStream.getTracks().forEach(track => track.stop());
+      }
+      callData.pc.close();
     }
+    this.activeCalls.delete(callId);
+  }
+
+  getActiveCall(callId: string): { pc: RTCPeerConnection; stream: MediaStream; remoteStream: MediaStream | null } | null {
+    return this.activeCalls.get(callId) || null;
   }
 
   disconnect() {
-    this.activeCalls.forEach((call) => {
-      call.stream.getTracks().forEach((t) => t.stop());
-      call.pc.close();
-    });
     this.activeCalls.clear();
     if (this.socket) {
       this.socket.disconnect();

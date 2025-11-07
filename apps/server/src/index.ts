@@ -39,7 +39,14 @@ type CallSession = {
   sdp_offer?: any;
   sdp_answer?: any;
 };
-import { CallRepository } from './repository.js';
+// Old repository (kept for backward compatibility during transition)
+import { CallRepository as OldCallRepository } from './repository.js';
+// New production-grade repositories
+import { CallRepository } from './repositories/CallRepository.js';
+import { StaffAvailabilityRepository } from './repositories/StaffAvailabilityRepository.js';
+import { TimeoutWorker } from './workers/TimeoutWorker.js';
+import { createCallRoutes } from './routes/calls.js';
+import { createStaffRoutes } from './routes/staff.js';
 import { setupSocketHandlers } from './socket.js';
 
 dotenv.config();
@@ -51,14 +58,45 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-const corsOrigins = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean);
-app.use(cors({ origin: corsOrigins.length > 0 ? corsOrigins : true, credentials: true }));
+// CORS/Env sanity
+const serverPort = Number(process.env.SERVER_PORT || process.env.PORT || 8080);
+const clientOrigin = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const isDevelopment = process.env.NODE_ENV !== 'production';
+
+// In development, allow all origins for flexibility (network IPs, different ports, etc.)
+// In production, use strict CORS configuration
+const corsOptions = isDevelopment
+  ? {
+      origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+        // Allow requests with no origin (like mobile apps or curl requests)
+        if (!origin) return callback(null, true);
+        
+        // In development, allow all origins
+        callback(null, true);
+      },
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    }
+  : {
+      origin: (process.env.CORS_ORIGINS || `${clientOrigin},http://localhost:5174,http://localhost:${serverPort}`).split(',').filter(Boolean),
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization'],
+    };
+
+app.use(cors(corsOptions));
 
 const server = http.createServer(app);
 
 const io = new IOServer(server, {
   path: process.env.SOCKET_PATH || '/socket',
-  cors: { origin: corsOrigins.length > 0 ? corsOrigins : true, credentials: true },
+  cors: isDevelopment
+    ? { origin: true, credentials: true }
+    : {
+        origin: (process.env.CORS_ORIGINS || `${clientOrigin},http://localhost:5174,http://localhost:${serverPort}`).split(',').filter(Boolean),
+        credentials: true,
+      },
 });
 
 const ENABLE_UNIFIED = process.env.ENABLE_UNIFIED_MODE === 'true';
@@ -92,8 +130,11 @@ io.of(NAMESPACE).use((socket, next) => {
   }
 });
 
-// Initialize repository
+// Initialize repositories
 const callRepo = new CallRepository();
+const availabilityRepo = new StaffAvailabilityRepository();
+// Keep old repo for backward compatibility during transition
+const oldCallRepo = new OldCallRepository();
 
 // Helper function to create complete StaffProfile objects
 function createStaffProfile(email: string, dept?: string): {
@@ -135,8 +176,11 @@ const authLimiter = rateLimit({
   message: 'Too many login attempts',
 });
 
-// Health check
-app.get('/healthz', (_req, res) => res.json({ status: 'ok' }));
+// Health check - explicitly handle CORS for health checks
+app.get('/healthz', (req, res) => {
+  // CORS middleware should handle this, but ensure headers are set
+  res.json({ status: 'ok' });
+});
 
 // Auth endpoints - support both unified and staff formats
 const unifiedLoginSchema = z.object({
@@ -266,6 +310,7 @@ const initiateSchema = z.object({
   purpose: z.string().optional(),
 });
 
+// Legacy endpoint - kept for backward compatibility
 app.post('/api/calls/initiate', apiLimiter, authMiddleware, async (req: Request & { user?: AuthPayload }, res) => {
   const parsed = initiateSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
@@ -284,7 +329,7 @@ app.post('/api/calls/initiate', apiLimiter, authMiddleware, async (req: Request 
     updated_at: now,
   };
   
-  await callRepo.create(session);
+  await oldCallRepo.create(session);
   
   const nsp = io.of(NAMESPACE);
   const clientInfo = { clientId, name: req.user?.userId };
@@ -305,37 +350,39 @@ const acceptDeclineSchema = z.object({
   reason: z.string().optional(),
 });
 
+// Legacy endpoint - kept for backward compatibility
 app.post('/api/calls/accept', apiLimiter, authMiddleware, async (req, res) => {
   const parsed = acceptDeclineSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
   
   const { callId, staffId } = parsed.data;
-  const sess = await callRepo.get(callId);
+  const sess = await oldCallRepo.get(callId);
   if (!sess) return res.status(404).json({ error: 'not found' });
   
   sess.state = 'accepted';
   sess.staff_id = staffId;
   sess.updated_at = Date.now();
   
-  await callRepo.update(sess);
+  await oldCallRepo.update(sess);
   
   io.of(NAMESPACE).to(rooms.call(callId)).emit('call:update', { state: 'accepted', staffId });
   return res.json({ ok: true });
 });
 
+// Legacy endpoint - kept for backward compatibility
 app.post('/api/calls/decline', apiLimiter, authMiddleware, async (req, res) => {
   const parsed = acceptDeclineSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
   
   const { callId, staffId, reason } = parsed.data;
-  const sess = await callRepo.get(callId);
+  const sess = await oldCallRepo.get(callId);
   if (!sess) return res.status(404).json({ error: 'not found' });
   
   sess.state = 'declined';
   sess.staff_id = staffId;
   sess.updated_at = Date.now();
   
-  await callRepo.update(sess);
+  await oldCallRepo.update(sess);
   
   io.of(NAMESPACE).to(rooms.call(callId)).emit('call:update', { state: 'declined', reason });
   return res.json({ ok: true });
@@ -348,19 +395,20 @@ const sdpSchema = z.object({
   sdp: z.any(),
 });
 
+// Legacy endpoint - kept for backward compatibility
 app.post('/api/calls/sdp', apiLimiter, authMiddleware, async (req, res) => {
   const parsed = sdpSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
   
   const { callId, type, sdp } = parsed.data;
-  const sess = await callRepo.get(callId);
+  const sess = await oldCallRepo.get(callId);
   if (!sess) return res.status(404).json({ error: 'not found' });
   
   if (type === 'offer') sess.sdp_offer = sdp;
   else sess.sdp_answer = sdp;
   sess.updated_at = Date.now();
   
-  await callRepo.update(sess);
+  await oldCallRepo.update(sess);
   
   io.of(NAMESPACE).to(rooms.call(callId)).emit('call:sdp', { callId, type, sdp });
   return res.json({ ok: true });
@@ -377,15 +425,25 @@ app.post('/api/calls/ice', apiLimiter, authMiddleware, async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
   
   const { callId, candidate } = parsed.data;
-  const sess = await callRepo.get(callId);
+  const sess = await oldCallRepo.get(callId);
   if (!sess) return res.status(404).json({ error: 'not found' });
   
   io.of(NAMESPACE).to(rooms.call(callId)).emit('call:ice', { callId, candidate });
   return res.json({ ok: true });
 });
 
-// Setup Socket.IO handlers
-setupSocketHandlers(io.of(NAMESPACE), callRepo);
+// Mount new production-grade API routes with auth middleware
+const callRoutes = createCallRoutes(callRepo, availabilityRepo, io);
+const staffRoutes = createStaffRoutes(availabilityRepo);
+app.use('/api', authMiddleware, callRoutes);
+app.use('/api', authMiddleware, staffRoutes);
+
+// Setup Socket.IO handlers (pass both old and new repos for compatibility)
+setupSocketHandlers(io.of(NAMESPACE), oldCallRepo, undefined, undefined, callRepo);
+
+// Start timeout worker for call timeouts
+const timeoutWorker = new TimeoutWorker(callRepo, io);
+timeoutWorker.start();
 
 // Dev proxy vs prod static - Always serve from unified server
 if (ENABLE_UNIFIED) {
@@ -402,7 +460,6 @@ if (ENABLE_UNIFIED) {
       pathRewrite: {
         [`^${staffPath}`]: '', // Strip /staff prefix when proxying
       },
-      logLevel: 'debug',
     });
     // Match /staff and /staff/* explicitly
     app.use(`${staffPath}`, staffProxy);
@@ -440,7 +497,7 @@ if (ENABLE_UNIFIED) {
   }
 }
 
-const port = Number(process.env.PORT || 8080);
+const port = serverPort;
 server.listen(port, '0.0.0.0', () => {
   console.log(`Server listening on :${port}`);
   console.log(`Unified mode: ${ENABLE_UNIFIED}`);
@@ -457,8 +514,11 @@ server.listen(port, '0.0.0.0', () => {
 // Graceful shutdown
 const shutdown = () => {
   console.log('Shutting down...');
+  timeoutWorker.stop();
   server.close(() => {
     callRepo.close();
+    availabilityRepo.close();
+    oldCallRepo.close();
     process.exit(0);
   });
   setTimeout(() => process.exit(1), 10000);

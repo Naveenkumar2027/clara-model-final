@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiService } from '../services/api';
+import { useServerReady } from '../src/hooks/useServerReady';
 
 const Login: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -9,6 +10,11 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  
+  const { isReady, isChecking, error: serverError, progress } = useServerReady({
+    maxRetries: 20,
+    retryDelay: 500,
+  });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +80,16 @@ const Login: React.FC = () => {
               required
             />
           </div>
-          {error && <p className="text-red-400 text-sm text-center">{error}</p>}
+          {isChecking && !isReady && (
+            <div className="bg-yellow-500/20 border border-yellow-500/50 rounded-lg p-3 mb-4">
+              <p className="text-yellow-300 text-sm text-center">
+                ⚠️ Server status unknown. You can still try to login.
+              </p>
+            </div>
+          )}
+          {error && (
+            <p className="text-red-400 text-sm text-center">{error}</p>
+          )}
           <button
             type="submit"
             disabled={loading}

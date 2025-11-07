@@ -1,8 +1,10 @@
 import { io, Socket } from 'socket.io-client';
 
+// Always use backend server port (8080), not the staff dev server port
 const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8080';
 const SOCKET_PATH = import.meta.env.VITE_SOCKET_PATH || '/socket';
-const ENABLE_UNIFIED = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true';
+// Always enable unified mode for WebRTC calls (required for presentation)
+const ENABLE_UNIFIED = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true' || true;
 
 export interface CallIncomingEvent {
   callId: string;
@@ -46,6 +48,11 @@ export class StaffRTC {
   }
 
   private getHeaders() {
+    // Always get the latest token from localStorage in case it was refreshed
+    const latestToken = localStorage.getItem('clara-jwt-token') || this.token;
+    if (latestToken !== this.token) {
+      this.token = latestToken;
+    }
     return {
       Authorization: `Bearer ${this.token}`,
       'Content-Type': 'application/json',
@@ -55,6 +62,7 @@ export class StaffRTC {
   private ensureSocket() {
     if (!this.socket) {
       const socketUrl = this.apiBase.replace(/\/api$/, '');
+      // Connect to /rtc namespace (same as client CallService)
       this.socket = io(`${socketUrl}/rtc`, {
         path: SOCKET_PATH,
         auth: { token: this.token },
@@ -62,7 +70,23 @@ export class StaffRTC {
 
       // Join staff room
       this.socket.on('connect', () => {
-        console.log('Staff socket connected');
+        console.log('[StaffRTC] ===== SOCKET CONNECTED =====');
+        console.log('[StaffRTC] Staff socket connected to /rtc namespace');
+        console.log('[StaffRTC] Staff ID:', this.staffId);
+        console.log('[StaffRTC] Socket ID:', this.socket.id);
+        console.log('[StaffRTC] Socket connected:', this.socket.connected);
+        
+        // Wait a bit to ensure socket is fully ready
+        setTimeout(() => {
+          // Explicitly join the staff room (server should also do this, but this ensures it)
+          console.log('[StaffRTC] Emitting join:staff event for staffId:', this.staffId);
+          this.socket.emit('join:staff', { staffId: this.staffId });
+          console.log('[StaffRTC] ✅ join:staff event emitted');
+        }, 100);
+      });
+
+      this.socket.on('connect_error', (error) => {
+        console.error('Staff socket connection error:', error);
       });
     }
     return this.socket;
@@ -75,54 +99,202 @@ export class StaffRTC {
     onIncoming: (event: CallIncomingEvent) => void;
     onUpdate: (event: CallUpdateEvent) => void;
   }) {
-    if (!ENABLE_UNIFIED) return;
+    if (!ENABLE_UNIFIED) {
+      console.warn('[StaffRTC] Unified mode is disabled, handlers not attached');
+      return;
+    }
 
     const socket = this.ensureSocket();
 
-    socket.on('call:incoming', (event: CallIncomingEvent) => {
+    // Remove any existing listeners to avoid duplicates
+    socket.off('call:incoming');
+    socket.off('call.initiated'); // New event name
+    socket.off('call:update');
+    socket.off('call.accepted'); // New event names
+    socket.off('call.declined');
+    socket.off('call.canceled');
+    socket.off('call.missed');
+
+    // Attach event handlers - support both old and new event names
+    const handleIncoming = (event: CallIncomingEvent) => {
+      console.log('[StaffRTC] ===== RECEIVED INCOMING CALL EVENT =====');
+      console.log('[StaffRTC] Event:', JSON.stringify(event, null, 2));
+      console.log('[StaffRTC] Call ID:', event.callId);
+      console.log('[StaffRTC] Client Info:', event.clientInfo);
+      console.log('[StaffRTC] Calling onIncoming handler...');
       onIncoming(event);
+      console.log('[StaffRTC] ✅ onIncoming handler called');
+    };
+
+    socket.on('call:incoming', handleIncoming); // Old event name
+    socket.on('call.initiated', handleIncoming); // New event name
+    
+    // Test socket connection by listening for any events
+    socket.on('connect', () => {
+      console.log('[StaffRTC] Socket reconnected in attachHandlers');
+    });
+    
+    socket.on('disconnect', () => {
+      console.warn('[StaffRTC] Socket disconnected!');
+    });
+    
+    socket.on('error', (error) => {
+      console.error('[StaffRTC] Socket error:', error);
     });
 
-    socket.on('call:update', (event: CallUpdateEvent) => {
+    // Handle call updates - support both old and new event names
+    const handleUpdate = (event: CallUpdateEvent) => {
+      console.log('[StaffRTC] Received call update event:', event);
       onUpdate(event);
+    };
+
+    socket.on('call:update', handleUpdate); // Old event name
+    socket.on('call.accepted', (event: any) => {
+      handleUpdate({ state: 'accepted', staffId: event.staff?.id });
     });
+    socket.on('call.declined', (event: any) => {
+      handleUpdate({ state: 'declined', reason: event.reason });
+    });
+    socket.on('call.canceled', () => {
+      handleUpdate({ state: 'ended', reason: 'Call canceled by client' });
+    });
+    socket.on('call.missed', (event: any) => {
+      handleUpdate({ state: 'ended', reason: event.reason || 'Call missed' });
+    });
+
+    // If socket is already connected, ensure room is joined immediately
+    if (socket.connected) {
+      console.log('[StaffRTC] Socket already connected, joining staff room immediately...');
+      socket.emit('join:staff', { staffId: this.staffId });
+    } else {
+      // Also listen for connection to ensure room is joined when it connects
+      socket.on('connect', () => {
+        console.log('[StaffRTC] Socket connected in attachHandlers, ensuring staff room join...');
+        // Re-emit join:staff to ensure we're in the room
+        socket.emit('join:staff', { staffId: this.staffId });
+      });
+    }
+
+    console.log('[StaffRTC] Event handlers attached for staffId:', this.staffId);
   }
 
-  async accept(callId: string): Promise<{ pc: RTCPeerConnection; localStream: MediaStream; onRemoteStream: (callback: (stream: MediaStream | null) => void) => void } | null> {
+  async accept(callId: string, existingStream?: MediaStream): Promise<{ pc: RTCPeerConnection; stream: MediaStream; remoteStream: MediaStream | null } | null> {
     if (!ENABLE_UNIFIED) return null;
 
     try {
-      // Accept via REST
-      const res = await fetch(`${this.apiBase}/api/calls/accept`, {
+      // Refresh token if needed before accepting
+      let res = await fetch(`${this.apiBase}/api/v1/calls/${callId}/accept`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({ callId, staffId: this.staffId }),
       });
 
+      // If 401, refresh token and retry
+      if (res.status === 401) {
+        console.log('[StaffRTC] Token expired, refreshing...');
+        // Try to get user email from localStorage, or reconstruct from staffId
+        const userStr = localStorage.getItem('user');
+        let userEmail = this.staffId + '@gmail.com'; // Default reconstruction
+        if (userStr) {
+          try {
+            const user = JSON.parse(userStr);
+            userEmail = user.email || userEmail;
+          } catch (e) {
+            console.warn('[StaffRTC] Could not parse user from localStorage');
+          }
+        }
+        
+        // Try unified format first
+        let refreshRes = await fetch(`${this.apiBase}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: userEmail,
+            role: 'staff',
+            staffId: this.staffId,
+          }),
+        });
+        
+        // If unified format fails, try email/password format
+        if (!refreshRes.ok) {
+          console.log('[StaffRTC] Unified login failed, trying email/password format...');
+          refreshRes = await fetch(`${this.apiBase}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: userEmail,
+              password: 'Password123!', // Default password for demo
+            }),
+          });
+        }
+        
+        if (refreshRes.ok) {
+          const data = await refreshRes.json();
+          if (data.token) {
+            this.token = data.token;
+            localStorage.setItem('clara-jwt-token', data.token);
+            console.log('[StaffRTC] Token refreshed, retrying accept...');
+            
+            // Retry with new token
+            res = await fetch(`${this.apiBase}/api/calls/accept`, {
+              method: 'POST',
+              headers: this.getHeaders(),
+              body: JSON.stringify({ callId, staffId: this.staffId }),
+            });
+          }
+        } else {
+          console.error('[StaffRTC] Token refresh failed:', refreshRes.status, await refreshRes.text());
+        }
+      }
+
       if (!res.ok) {
-        throw new Error(`Failed to accept call: ${res.statusText}`);
+        const errorText = await res.text();
+        // If conflict, the call might already be accepted - try to continue anyway
+        if (res.status === 409) {
+          console.warn('[StaffRTC] Call already accepted (409), continuing with WebRTC setup...');
+        } else {
+          throw new Error(`Failed to accept call: ${res.statusText} - ${errorText}`);
+        }
       }
 
       // Join call room
       const socket = this.ensureSocket();
       socket.emit('join:call', { callId });
 
-      // Create peer connection
+      // Create peer connection with TURN/STUN configuration
+      const turnServerUrl = import.meta.env.VITE_TURN_SERVER_URL;
+      const turnUsername = import.meta.env.VITE_TURN_USERNAME;
+      const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL;
+      
+      const iceServers: RTCIceServer[] = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ];
+      
+      // Add TURN server if configured
+      if (turnServerUrl) {
+        iceServers.push({
+          urls: turnServerUrl,
+          username: turnUsername,
+          credential: turnCredential,
+        });
+      }
+      
       const pc = new RTCPeerConnection({
-        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+        iceServers,
+        iceCandidatePoolSize: 10, // Pre-gather candidates for faster connection
       });
 
-      // Get user media
-      const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+      // Get user media (use existing stream if provided, otherwise request new)
+      let stream: MediaStream;
+      if (existingStream) {
+        stream = existingStream;
+      } else {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      }
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
-      // Handle remote stream tracking
-      let remoteStreamCallback: ((stream: MediaStream | null) => void) | null = null;
-      pc.ontrack = (event) => {
-        if (event.streams && event.streams[0] && remoteStreamCallback) {
-          remoteStreamCallback(event.streams[0]);
-        }
-      };
+      let remoteStream: MediaStream | null = null;
 
       // Handle ICE candidates
       pc.onicecandidate = (e) => {
@@ -135,38 +307,104 @@ export class StaffRTC {
         }
       };
 
-      // Listen for offer
-      socket.on('call:sdp', async ({ type, sdp }: CallSDPEvent) => {
-        if (type === 'offer') {
-          await pc.setRemoteDescription({ type: 'offer', sdp });
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-
-          await fetch(`${this.apiBase}/api/calls/sdp`, {
-            method: 'POST',
-            headers: this.getHeaders(),
-            body: JSON.stringify({ callId, from: this.staffId, type: 'answer', sdp: answer.sdp }),
-          });
+      // Handle remote stream
+      pc.ontrack = (e) => {
+        console.log('Staff received remote stream:', e.streams[0]);
+        if (e.streams && e.streams.length > 0) {
+          remoteStream = e.streams[0];
+          // Update stored call data
+          const callData = this.activeCalls.get(callId);
+          if (callData) {
+            (callData as any).remoteStream = remoteStream;
+          }
         }
-      });
+      };
+
+      // Handle connection state changes
+      pc.onconnectionstatechange = () => {
+        console.log('Staff peer connection state:', pc.connectionState);
+        if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+          console.warn('Staff peer connection issue:', pc.connectionState);
+        }
+      };
+
+      // Queue for ICE candidates until remote description is set
+      const iceCandidateQueue: RTCIceCandidateInit[] = [];
+      let remoteDescriptionSet = false;
+
+      // Process queued ICE candidates after remote description is set
+      const processQueuedCandidates = async () => {
+        if (remoteDescriptionSet && iceCandidateQueue.length > 0) {
+          console.log(`[StaffRTC] Processing ${iceCandidateQueue.length} queued ICE candidates`);
+          for (const candidate of iceCandidateQueue) {
+            try {
+              await pc.addIceCandidate(candidate);
+            } catch (error) {
+              console.error('[StaffRTC] Error adding queued ICE candidate:', error);
+            }
+          }
+          iceCandidateQueue.length = 0; // Clear the queue
+        }
+      };
+
+      // Listen for offer from client
+      const sdpHandler = async ({ type, sdp }: CallSDPEvent) => {
+        if (type === 'offer') {
+          try {
+            await pc.setRemoteDescription({ type: 'offer', sdp });
+            console.log('[StaffRTC] Staff set remote description (offer)');
+            remoteDescriptionSet = true;
+            
+            const answer = await pc.createAnswer({
+              offerToReceiveAudio: true,
+              offerToReceiveVideo: true,
+            });
+            await pc.setLocalDescription(answer);
+
+            await fetch(`${this.apiBase}/api/calls/sdp`, {
+              method: 'POST',
+              headers: this.getHeaders(),
+              body: JSON.stringify({ callId, from: this.staffId, type: 'answer', sdp: answer.sdp }),
+            });
+            console.log('[StaffRTC] Staff answer created and sent');
+            
+            // Process any queued ICE candidates
+            await processQueuedCandidates();
+          } catch (error) {
+            console.error('[StaffRTC] Error handling offer:', error);
+          }
+        }
+      };
+
+      socket.on('call:sdp', sdpHandler);
 
       // Listen for ICE candidates
-      socket.on('call:ice', async ({ candidate }: CallICEEvent) => {
-        if (candidate) {
-          await pc.addIceCandidate(candidate);
+      const iceHandler = async ({ candidate }: CallICEEvent) => {
+        if (!candidate || pc.signalingState === 'closed') return;
+        
+        // If remote description is not set yet, queue the candidate
+        if (!remoteDescriptionSet || pc.remoteDescription === null) {
+          console.log('[StaffRTC] Queueing ICE candidate (remote description not set yet)');
+          iceCandidateQueue.push(candidate);
+          return;
         }
-      });
 
-      this.activeCalls.set(callId, { pc, stream: localStream });
-
-      // Return with remote stream callback setup
-      return {
-        pc,
-        localStream,
-        onRemoteStream: (callback: (stream: MediaStream | null) => void) => {
-          remoteStreamCallback = callback;
-        },
+        // Remote description is set, add the candidate
+        try {
+          await pc.addIceCandidate(candidate);
+          console.log('[StaffRTC] Added ICE candidate');
+        } catch (error) {
+          console.error('[StaffRTC] Error adding ICE candidate:', error);
+        }
       };
+
+      socket.on('call:ice', iceHandler);
+
+      // Store call data
+      const callData = { pc, stream, remoteStream: remoteStream || null };
+      this.activeCalls.set(callId, callData);
+
+      return { pc, stream, remoteStream: remoteStream || null };
     } catch (error) {
       console.error('StaffRTC.accept error:', error);
       return null;
@@ -177,7 +415,7 @@ export class StaffRTC {
     if (!ENABLE_UNIFIED) return;
 
     try {
-      await fetch(`${this.apiBase}/api/calls/decline`, {
+      await fetch(`${this.apiBase}/api/v1/calls/${callId}/decline`, {
         method: 'POST',
         headers: this.getHeaders(),
         body: JSON.stringify({ callId, staffId: this.staffId, reason }),

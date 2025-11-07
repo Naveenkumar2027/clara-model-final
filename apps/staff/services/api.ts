@@ -1,21 +1,7 @@
-// Determine API base URL - prefer env vars, otherwise use unified server
-const getApiBaseUrl = () => {
-  if (import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE) {
-    return `${import.meta.env.VITE_API_BASE_URL || import.meta.env.VITE_API_BASE}/api`;
-  }
-  // In development, always use the unified server on port 8080
-  if (typeof window !== 'undefined') {
-    // If accessed through unified server, use current origin
-    if (window.location.port === '8080' || window.location.pathname.startsWith('/staff')) {
-      return `${window.location.origin}/api`;
-    }
-    // Otherwise, use the unified server port
-    return 'http://localhost:8080/api';
-  }
-  return 'http://localhost:8080/api';
-};
+import { getApiBaseUrl, checkServerHealth } from '../src/utils/serverHealth';
 
-const API_BASE_URL = getApiBaseUrl();
+// Compute API base URL at runtime to ensure it's always current
+const getApiBaseUrlRuntime = () => getApiBaseUrl();
 
 interface ApiResponse<T> {
   data?: T;
@@ -38,12 +24,15 @@ class ApiService {
         return false;
       }
 
+      const API_BASE_URL = getApiBaseUrlRuntime();
       const response = await fetch(`${API_BASE_URL}/auth/refresh-token`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ refreshToken }),
+        mode: 'cors',
+        credentials: 'include',
       });
 
       if (response.ok) {
@@ -61,8 +50,10 @@ class ApiService {
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount = 0
   ): Promise<ApiResponse<T>> {
+    const maxRetries = 3;
     const token = this.getToken();
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
@@ -73,11 +64,35 @@ class ApiService {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
+    // Get API base URL at runtime
+    const API_BASE_URL = getApiBaseUrlRuntime();
+    const url = `${API_BASE_URL}${endpoint}`;
+    console.log('[ApiService] Making request to:', url);
+    console.log('[ApiService] Request headers:', headers);
+
     try {
-      let response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      // Optional health check - log warning but don't block request
+      // The actual fetch will handle connection errors properly
+      if (retryCount === 0) {
+        checkServerHealth({ maxRetries: 1, retryDelay: 500, timeout: 2000 })
+          .then(isHealthy => {
+            if (!isHealthy) {
+              console.warn('[ApiService] Server health check failed, but proceeding with request');
+            }
+          })
+          .catch(() => {
+            // Ignore health check errors, proceed with request
+          });
+      }
+
+      let response = await fetch(url, {
         ...options,
         headers,
+        mode: 'cors', // Explicitly enable CORS
+        credentials: 'include', // Include credentials (cookies, auth headers)
       });
+
+      console.log('[ApiService] Response status:', response.status, 'for URL:', url);
 
       // If token expired, try to refresh
       if (response.status === 403 && token) {
@@ -86,9 +101,11 @@ class ApiService {
           // Retry request with new token
           const newToken = this.getToken();
           headers['Authorization'] = `Bearer ${newToken}`;
-          response = await fetch(`${API_BASE_URL}${endpoint}`, {
+          response = await fetch(url, {
             ...options,
             headers,
+            mode: 'cors',
+            credentials: 'include',
           });
         }
       }
@@ -109,11 +126,31 @@ class ApiService {
 
       return { data };
     } catch (error: any) {
-      console.error('API request error:', error);
-      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
-        return { error: `Cannot connect to server. Please ensure the backend is running on ${API_BASE_URL.replace('/api', '')}` };
+      console.error('[ApiService] Fetch error for URL:', url, error);
+      console.error('[ApiService] Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
+      
+      // Check for CORS-specific errors
+      if (error.message?.includes('CORS') || error.message?.includes('Access-Control') || error.name === 'TypeError') {
+        const serverBase = API_BASE_URL.replace('/api', '');
+        return { error: `CORS error: Cannot access server at ${serverBase}. Please check server CORS configuration and ensure the backend is running.` };
       }
-      return { error: error.message || 'Network error. Please check your connection.' };
+      
+      // Retry on network errors
+      if ((error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) && retryCount < maxRetries) {
+        console.log(`[ApiService] Retrying request (${retryCount + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+        return this.request<T>(endpoint, options, retryCount + 1);
+      }
+      
+      if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+        const serverBase = API_BASE_URL.replace('/api', '');
+        return { error: `Cannot connect to server at ${serverBase}. Please ensure the backend is running and CORS is configured correctly.` };
+      }
+      return { error: error.message || 'Network error. Please check your connection and try again.' };
     }
   }
 
