@@ -197,13 +197,15 @@ export function createCallRoutes(
         });
       }
 
-      // Also emit to org room for broadcast
-      nsp.to(rooms.org(effectiveOrgId)).emit('call.initiated', {
-        callId,
-        client: clientInfo,
-        reason,
-        createdAt: now,
-      });
+      // Only broadcast to the entire organisation when no specific staff target was provided
+      if (!targetStaffId) {
+        nsp.to(rooms.org(effectiveOrgId)).emit('call.initiated', {
+          callId,
+          client: clientInfo,
+          reason,
+          createdAt: now,
+        });
+      }
 
       res.json({ callId, status: call.status });
     } catch (error: any) {
@@ -266,6 +268,7 @@ export function createCallRoutes(
 
       // Also emit to call room
       nsp.to(rooms.call(callId)).emit('call:update', {
+        callId,
         state: 'accepted',
         staffId,
       });
@@ -305,6 +308,7 @@ export function createCallRoutes(
       });
 
       nsp.to(rooms.call(callId)).emit('call:update', {
+        callId,
         state: 'declined',
         reason,
       });
@@ -341,7 +345,7 @@ export function createCallRoutes(
       // Emit to all staff
       const nsp = io.of(NAMESPACE);
       nsp.to(rooms.org(call.orgId)).emit('call.canceled', { callId });
-      nsp.to(rooms.call(callId)).emit('call:update', { state: 'canceled' });
+      nsp.to(rooms.call(callId)).emit('call:update', { callId, state: 'canceled' });
 
       res.json({ callId, status: 'canceled' });
     } catch (error: any) {
@@ -386,7 +390,7 @@ export function createCallRoutes(
       await callRepo.updateStatus(callId, 'ended', { endedAt: Date.now() });
 
       const nsp = io.of(NAMESPACE);
-      nsp.to(rooms.call(callId)).emit('call:update', { state: 'ended' });
+      nsp.to(rooms.call(callId)).emit('call:update', { callId, state: 'ended' });
       nsp.to(rooms.client(call.createdByUserId)).emit('call.ended', { callId });
 
       res.json({ callId, status: 'ended' });

@@ -718,7 +718,7 @@ app.post('/api/calls/initiate', apiLimiter, authMiddleware, async (req: Request 
   } else if (department) {
     nsp.to(rooms.dept(department)).emit('call:incoming', { callId, clientInfo, purpose, ts: now });
   }
-  nsp.to(rooms.call(callId)).emit('call:update', { state: 'ringing' });
+  nsp.to(rooms.call(callId)).emit('call:update', { callId, state: 'ringing' });
   
   return res.json({ callId });
 });
@@ -743,7 +743,7 @@ app.post('/api/calls/accept', apiLimiter, authMiddleware, async (req, res) => {
   
   await callRepo.update(sess);
   
-  io.of(NAMESPACE).to(rooms.call(callId)).emit('call:update', { state: 'accepted', staffId });
+  io.of(NAMESPACE).to(rooms.call(callId)).emit('call:update', { callId, state: 'accepted', staffId });
   return res.json({ ok: true });
 });
 
@@ -761,7 +761,7 @@ app.post('/api/calls/decline', apiLimiter, authMiddleware, async (req, res) => {
   
   await callRepo.update(sess);
   
-  io.of(NAMESPACE).to(rooms.call(callId)).emit('call:update', { state: 'declined', reason });
+  io.of(NAMESPACE).to(rooms.call(callId)).emit('call:update', { callId, state: 'declined', reason });
   return res.json({ ok: true });
 });
 

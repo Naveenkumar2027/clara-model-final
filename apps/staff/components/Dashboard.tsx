@@ -1,5 +1,16 @@
-import React, { useState, createContext, useEffect } from 'react';
-import { StaffProfile, NavItem, TimetableEntry, Meeting, Group, ChatMessage, SemesterTimetable } from '../types';
+import React, { useState, createContext, useEffect, useCallback } from 'react';
+import {
+  StaffProfile,
+  NavItem,
+  TimetableEntry,
+  Meeting,
+  Group,
+  ChatMessage,
+  SemesterTimetable,
+  CallUpdate,
+  PendingAppointment,
+  Appointment,
+} from '../types';
 import { HOD_EMAIL } from '../constants';
 import Sidebar from './Sidebar';
 import DashboardHome from './DashboardHome';
@@ -13,8 +24,9 @@ import { useNotification } from './NotificationProvider';
 import NotificationContainer from './NotificationContainer';
 import NotificationSync from './NotificationSync';
 import { apiService } from '../services/api';
-import IncomingCallModal from './IncomingCallModal';
 import { StaffRTC, type CallIncomingEvent } from '../services/StaffRTC';
+import FloatingCallNotification from './FloatingCallNotification';
+import { useStaffCallStore } from '../src/stores/callStore';
 
 interface DashboardProps {
   user: StaffProfile;
@@ -71,11 +83,202 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
     // The useEffect will automatically reload the timetable when selectedSemester changes
   };
   const [meetings, setMeetings] = useState<Meeting[]>([]);
+  const [appointments, setAppointments] = useState<Appointment[]>(() => {
+    try {
+      const stored = localStorage.getItem('staff-appointments');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [pendingAppointments, setPendingAppointments] = useState<PendingAppointment[]>([]);
+  const [callUpdates, setCallUpdates] = useState<CallUpdate[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [activeChatGroup, setActiveChatGroup] = useState<string | null>(null);
   const { addNotification } = useNotification();
 
   const isHod = user.email === HOD_EMAIL;
+  const staffId = user.email?.split('@')[0] || user.id;
+
+  const persistAppointments = useCallback(
+    (updater: (prev: Appointment[]) => Appointment[]) => {
+      setAppointments((prev) => {
+        const next = updater(prev);
+        try {
+          localStorage.setItem('staff-appointments', JSON.stringify(next));
+        } catch (error) {
+          console.error('[Dashboard] Failed to persist appointments:', error);
+        }
+        return next;
+      });
+    },
+    []
+  );
+
+  const pushCallUpdate = useCallback((update: CallUpdate) => {
+    setCallUpdates((prev) => {
+      const filtered = prev.filter((entry) => entry.callId !== update.callId);
+      return [update, ...filtered].slice(0, 10);
+    });
+  }, []);
+
+  const addPendingAppointment = useCallback((appointment: PendingAppointment) => {
+    setPendingAppointments((prev) => {
+      const exists = prev.some((item) => item.callId === appointment.callId);
+      if (exists) {
+        return prev;
+      }
+      return [appointment, ...prev];
+    });
+  }, []);
+
+  const removePendingAppointment = useCallback((appointmentId: string) => {
+    setPendingAppointments((prev) => prev.filter((item) => item.id !== appointmentId));
+  }, []);
+
+  const handleApprovePendingAppointment = useCallback(
+    (pendingId: string) => {
+      setPendingAppointments((prevPending) => {
+        const item = prevPending.find((p) => p.id === pendingId);
+        if (!item) {
+          return prevPending;
+        }
+
+        const scheduledDate = item.scheduledFor?.date || new Date().toLocaleDateString();
+        const scheduledTime =
+          item.scheduledFor?.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const appointmentRecord: Appointment = {
+          id: `apt-${item.callId}`,
+          clientName: item.clientName,
+          purpose: item.purpose || 'Video consultation',
+          date: scheduledDate,
+          time: scheduledTime,
+          status: 'Confirmed',
+          staffId,
+        };
+
+        persistAppointments((prev) => [...prev, appointmentRecord]);
+
+        if (staffRTC) {
+          staffRTC.notifyAppointmentDecision(item.callId, 'confirmed', {
+            staffId,
+            staffName: user.name,
+            clientName: item.clientName,
+            date: scheduledDate,
+            time: scheduledTime,
+            purpose: appointmentRecord.purpose,
+          });
+        }
+
+        return prevPending.filter((p) => p.id !== pendingId);
+      });
+    },
+    [persistAppointments, staffRTC, staffId, user.name]
+  );
+
+  const handleRejectPendingAppointment = useCallback(
+    (pendingId: string) => {
+      setPendingAppointments((prevPending) => {
+        const item = prevPending.find((p) => p.id === pendingId);
+        if (!item) {
+          return prevPending;
+        }
+
+        if (staffRTC) {
+          const now = new Date();
+          staffRTC.notifyAppointmentDecision(item.callId, 'rejected', {
+            staffId,
+            staffName: user.name,
+            clientName: item.clientName,
+            date: now.toLocaleDateString(),
+            time: now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            purpose: item.purpose,
+          });
+        }
+
+        return prevPending.filter((p) => p.id !== pendingId);
+      });
+    },
+    [staffRTC, staffId, user.name]
+  );
+
+  const registerRtcHandlers = useCallback(
+    (rtc: StaffRTC) => {
+      rtc.attachHandlers({
+        onIncoming: (call) => {
+          const clientName = call.clientInfo.name || call.clientInfo.clientId || 'Client';
+          pushCallUpdate({
+            id: `${call.callId}-${call.ts}`,
+            callId: call.callId,
+            clientName,
+            timestamp: call.ts || Date.now(),
+            direction: 'incoming',
+            status: 'ringing',
+            purpose: call.purpose,
+          });
+          try {
+            useStaffCallStore.getState().onIncoming({
+              callId: call.callId,
+              clientInfo: {
+                id: call.clientInfo.clientId,
+                name: clientName,
+                avatar: call.clientInfo.avatar,
+              },
+              reason: call.purpose,
+              createdAt: call.ts,
+            });
+            useStaffCallStore.getState().showPopup();
+          } catch (error) {
+            console.warn('[Dashboard] Failed to forward incoming call to call store:', error);
+          }
+          setIncomingCall(call);
+        },
+        onUpdate: (update) => {
+          if (!update.callId) {
+            return;
+          }
+          if (update.callId) {
+            setCallUpdates((prev) =>
+              prev.map((entry) => {
+                if (entry.callId !== update.callId) {
+                  return entry;
+                }
+                let status: CallUpdate['status'] = entry.status;
+                if (update.state === 'accepted') status = 'answered';
+                if (update.state === 'declined') status = 'declined';
+                if (update.state === 'ended') status = 'ended';
+                if (update.state === 'ringing') status = 'ringing';
+                return { ...entry, status };
+              })
+            );
+          }
+
+          if ((update.state === 'declined' || update.state === 'ended') && update.callId) {
+            removePendingAppointment(update.callId);
+            try {
+              const store = useStaffCallStore.getState();
+              if (update.state === 'ended') {
+                store.endCall();
+              } else {
+                store.declineCall(update.reason);
+              }
+            } catch (error) {
+              console.warn('[Dashboard] Failed to sync call store on update:', error);
+            }
+          }
+
+          if (update.state === 'accepted' && update.callId) {
+            try {
+              useStaffCallStore.getState().setInCall({ callId: update.callId });
+            } catch (error) {
+              console.warn('[Dashboard] Failed to set call store in_call state:', error);
+            }
+          }
+        },
+      });
+    },
+    [pushCallUpdate, removePendingAppointment]
+  );
 
   // Load current semester timetable for dashboard display
   useEffect(() => {
@@ -221,13 +424,16 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
     }
     const savedMeetings = localStorage.getItem('meetings');
     setMeetings(savedMeetings ? JSON.parse(savedMeetings) : []);
+    const savedAppointments = localStorage.getItem('staff-appointments');
+    setAppointments(savedAppointments ? JSON.parse(savedAppointments) : []);
     const savedGroups = localStorage.getItem('groups');
     setGroups(savedGroups ? JSON.parse(savedGroups) : []);
 
     // Initialize unified RTC if enabled
     const enableUnified = (import.meta.env.VITE_ENABLE_UNIFIED_MODE ?? 'true') === 'true';
-    if (enableUnified && user) {
-      const apiBase = import.meta.env.VITE_API_BASE || 
+    if (enableUnified && user && !staffRTC) {
+      const apiBase =
+        import.meta.env.VITE_API_BASE ||
         (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
 
       const getStoredToken = () =>
@@ -254,9 +460,18 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
         }
       };
 
-      let token = getStoredToken();
+      const initializeRTC = async (tokenValue: string) => {
+        await ensureAvailability(tokenValue);
+        const rtc = new StaffRTC({
+          token: tokenValue,
+          staffId,
+        });
+        registerRtcHandlers(rtc);
+        setStaffRTC(rtc);
+      };
+
+      const token = getStoredToken();
       if (!token) {
-        // Auto-login for demo
         fetch(`${apiBase}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -269,47 +484,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
         })
           .then((res) => res.json())
           .then(async (data) => {
-            token = data.token;
-            if (token) {
-              storeToken(token);
-              await ensureAvailability(token);
-              // Extract email prefix as staffId (e.g., "anithacs" from "anithacs@gmail.com")
-              // This matches the format the client uses when calling
-              const staffId = user.email?.split('@')[0] || user.id;
-              const rtc = new StaffRTC({
-                token,
-                staffId: staffId,
-              });
-              rtc.attachHandlers({
-                onIncoming: (call) => {
-                  setIncomingCall(call);
-                },
-                onUpdate: (update) => {
-                  console.log('Call update:', update);
-                },
-              });
-              setStaffRTC(rtc);
+            if (data.token) {
+              storeToken(data.token);
+              await initializeRTC(data.token);
             }
           })
           .catch(console.error);
       } else {
-        void ensureAvailability(token);
-        // Extract email prefix as staffId (e.g., "anithacs" from "anithacs@gmail.com")
-        // This matches the format the client uses when calling
-        const staffId = user.email?.split('@')[0] || user.id;
-        const rtc = new StaffRTC({
-          token,
-          staffId: staffId,
-        });
-        rtc.attachHandlers({
-          onIncoming: (call) => {
-            setIncomingCall(call);
-          },
-          onUpdate: (update) => {
-            console.log('Call update:', update);
-          },
-        });
-        setStaffRTC(rtc);
+        void initializeRTC(token);
       }
     }
 
@@ -318,7 +500,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
         staffRTC.disconnect();
       }
     };
-  }, [user, staffRTC]);
+  }, [user, staffRTC, staffId, registerRtcHandlers]);
+
+  useEffect(() => {
+    if (staffRTC) {
+      registerRtcHandlers(staffRTC);
+    }
+  }, [staffRTC, registerRtcHandlers]);
   
   // When active view changes away from Team Directory, clear the active chat
   useEffect(() => {
@@ -383,13 +571,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
   const renderActiveComponent = () => {
     switch (activeView) {
       case 'Dashboard':
-        return <DashboardHome 
-          timetable={timetable} 
-          meetings={meetings} 
-          semesterTimetable={semesterTimetable} 
-          selectedSemester={selectedSemester}
-          onSemesterChange={handleSemesterChange}
-        />;
+        return (
+          <DashboardHome
+            timetable={timetable}
+            meetings={meetings}
+            appointments={appointments}
+            callUpdates={callUpdates}
+            pendingAppointments={pendingAppointments}
+            onAcceptPendingAppointment={handleApprovePendingAppointment}
+            onRejectPendingAppointment={handleRejectPendingAppointment}
+            semesterTimetable={semesterTimetable}
+            selectedSemester={selectedSemester}
+            onSemesterChange={handleSemesterChange}
+          />
+        );
       case 'Timetable':
         return <Timetable initialTimetable={timetable} onTimetableUpdate={handleTimetableUpdate} user={user} />;
       case 'Appointments':
@@ -415,16 +610,64 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
       case 'Settings':
         return <Settings />;
       default:
-        return <DashboardHome timetable={timetable} meetings={meetings} />;
+        return (
+          <DashboardHome
+            timetable={timetable}
+            meetings={meetings}
+            appointments={appointments}
+            callUpdates={callUpdates}
+            pendingAppointments={pendingAppointments}
+            onAcceptPendingAppointment={handleApprovePendingAppointment}
+            onRejectPendingAppointment={handleRejectPendingAppointment}
+            semesterTimetable={semesterTimetable}
+            selectedSemester={selectedSemester}
+            onSemesterChange={handleSemesterChange}
+          />
+        );
     }
   };
 
   const handleAcceptCall = async () => {
     if (!incomingCall || !staffRTC) return;
+    try {
+      useStaffCallStore.getState().acceptCall();
+    } catch (error) {
+      console.warn('[Dashboard] Failed to update call store on accept:', error);
+    }
+    pushCallUpdate({
+      id: `${incomingCall.callId}-accept`,
+      callId: incomingCall.callId,
+      clientName: incomingCall.clientInfo.name || incomingCall.clientInfo.clientId || 'Client',
+      timestamp: Date.now(),
+      direction: 'incoming',
+      status: 'answered',
+      purpose: incomingCall.reason,
+    });
     const result = await staffRTC.accept(incomingCall.callId);
     if (result) {
+      useStaffCallStore
+        .getState()
+        .setInCall({
+          callId: incomingCall.callId,
+          clientInfo: {
+            id: incomingCall.clientInfo.clientId,
+            name: incomingCall.clientInfo.name,
+          },
+          peerConnection: result.pc,
+          localStream: result.stream,
+          remoteStream: result.remoteStream,
+          startedAt: Date.now(),
+          reason: incomingCall.reason,
+        });
+      addPendingAppointment({
+        id: incomingCall.callId,
+        callId: incomingCall.callId,
+        clientName: incomingCall.clientInfo.name || incomingCall.clientInfo.clientId || 'Client',
+        purpose: incomingCall.reason,
+        staffId,
+        requestedAt: Date.now(),
+      });
       setIncomingCall(null);
-      // Handle accepted call - could show video UI
       addNotification({
         type: 'meeting',
         title: 'Call Accepted',
@@ -436,6 +679,20 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
   const handleDeclineCall = async () => {
     if (!incomingCall || !staffRTC) return;
     await staffRTC.decline(incomingCall.callId, 'Declined by staff');
+    try {
+      useStaffCallStore.getState().declineCall('Declined by staff');
+    } catch (error) {
+      console.warn('[Dashboard] Failed to update call store on decline:', error);
+    }
+    pushCallUpdate({
+      id: `${incomingCall.callId}-decline`,
+      callId: incomingCall.callId,
+      clientName: incomingCall.clientInfo.name || incomingCall.clientInfo.clientId || 'Client',
+      timestamp: Date.now(),
+      direction: 'incoming',
+      status: 'declined',
+      purpose: incomingCall.reason,
+    });
     setIncomingCall(null);
   };
 
@@ -453,12 +710,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
         <NotificationSync userId={user.id} isActive={activeView !== 'Team Directory'} />
         {/* Show notifications in all views except Team Directory */}
         {activeView !== 'Team Directory' && <NotificationContainer />}
-        {/* Incoming call modal */}
-        <IncomingCallModal
+        <FloatingCallNotification
           visible={!!incomingCall}
           call={incomingCall}
           onAccept={handleAcceptCall}
           onDecline={handleDeclineCall}
+          timeoutMs={15000}
         />
       </div>
     </UserContext.Provider>

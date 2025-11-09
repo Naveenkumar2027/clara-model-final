@@ -152,7 +152,7 @@ export function setupSocketHandlers(
         const sess = await oldCallRepo.get(callId);
         if (sess) {
           // Convert old format to new format for compatibility
-          socket.emit('call:update', { state: sess.state });
+          socket.emit('call:update', { callId, state: sess.state });
           if (sess.sdp_answer) {
             console.log(`[Socket] Sending stored answer to newly joined socket for call ${callId}`);
             socket.emit('call:sdp', { callId, type: 'answer', sdp: sess.sdp_answer });
@@ -166,7 +166,7 @@ export function setupSocketHandlers(
         }
       } else {
         // New repository format - send stored SDP from metadata
-        socket.emit('call:update', { state: call.status });
+        socket.emit('call:update', { callId, state: call.status });
         if (call.metadata) {
           if (call.metadata.sdp_offer && user.role === 'staff') {
             console.log(`[Socket] Sending stored offer from metadata to newly joined staff socket for call ${callId}`);
@@ -200,12 +200,12 @@ export function setupSocketHandlers(
               callId,
               staff: { id: user.staffId, name: user.userId },
             });
-            nsp.to(rooms.call(callId)).emit('call:update', { state: 'accepted', staffId: user.staffId });
+            nsp.to(rooms.call(callId)).emit('call:update', { callId, state: 'accepted', staffId: user.staffId });
           }
           return;
         } else {
           // CAS failed - call already accepted
-          socket.emit('call:update', { state: 'accepted', error: 'Call already accepted by another staff' });
+          socket.emit('call:update', { callId, state: 'accepted', error: 'Call already accepted by another staff' });
           return;
         }
       }
@@ -219,7 +219,7 @@ export function setupSocketHandlers(
       sess.updated_at = Date.now();
       
       await oldCallRepo.update(sess);
-      nsp.to(rooms.call(callId)).emit('call:update', { state: 'accepted', staffId: user.staffId });
+      nsp.to(rooms.call(callId)).emit('call:update', { callId, state: 'accepted', staffId: user.staffId });
     });
 
     // Staff declines call
@@ -233,7 +233,7 @@ export function setupSocketHandlers(
             callId,
             reason: reason || 'Call declined by staff',
           });
-          nsp.to(rooms.call(callId)).emit('call:update', { state: 'declined', reason });
+          nsp.to(rooms.call(callId)).emit('call:update', { callId, state: 'declined', reason });
           return;
         }
       }
@@ -247,7 +247,7 @@ export function setupSocketHandlers(
       sess.updated_at = Date.now();
       
       await oldCallRepo.update(sess);
-      nsp.to(rooms.call(callId)).emit('call:update', { state: 'declined', reason });
+      nsp.to(rooms.call(callId)).emit('call:update', { callId, state: 'declined', reason });
     });
 
     // SDP exchange - also emit as webrtc.offer/webrtc.answer for new spec
@@ -411,6 +411,68 @@ export function setupSocketHandlers(
         }
       }
     });
+
+    socket.on(
+      'call:appointment',
+      async ({
+        callId,
+        status,
+        details,
+      }: {
+        callId: string;
+        status: 'confirmed' | 'rejected';
+        details?: Record<string, any>;
+      }) => {
+        if (user.role !== 'staff') {
+          console.warn('[Socket] call:appointment ignored for non-staff user');
+          return;
+        }
+
+        const normalizedStatus = status === 'confirmed' ? 'confirmed' : 'rejected';
+        let clientId: string | null = null;
+
+        if (newCallRepo) {
+          try {
+            const call = await newCallRepo.get(callId);
+            if (call?.createdByUserId) {
+              clientId = call.createdByUserId;
+            }
+          } catch (error) {
+            console.warn('[Socket] Unable to fetch call from newCallRepo for appointment update:', error);
+          }
+        }
+
+        if (!clientId) {
+          try {
+            const session = await oldCallRepo.get(callId);
+            if (session) {
+              clientId =
+                (session as any).createdByUserId ||
+                (session as any).created_by ||
+                (session as any).client_id ||
+                (session as any).clientId ||
+                null;
+            }
+          } catch (error) {
+            console.warn('[Socket] Unable to fetch call from oldCallRepo for appointment update:', error);
+          }
+        }
+
+        if (!clientId) {
+          console.warn(`[Socket] Unable to resolve clientId for call ${callId} when sending appointment update`);
+          return;
+        }
+
+        const payload = {
+          callId,
+          status: normalizedStatus,
+          details: details || {},
+        };
+
+        nsp.to(rooms.client(clientId)).emit('call.appointment', payload);
+        nsp.to(rooms.call(callId)).emit('call:appointment', payload);
+      }
+    );
 
     socket.on('disconnect', () => {
       console.log(`User ${user.userId} disconnected`);

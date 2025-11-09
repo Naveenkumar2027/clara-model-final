@@ -1,6 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 
 interface CallUpdateEvent {
+  callId?: string;
   state: 'created' | 'ringing' | 'accepted' | 'declined' | 'ended';
   staffId?: string;
   reason?: string;
@@ -15,6 +16,19 @@ interface CallSDPEvent {
 interface CallICEEvent {
   callId: string;
   candidate: RTCIceCandidateInit;
+}
+
+interface AppointmentUpdateEvent {
+  callId: string;
+  status: 'confirmed' | 'rejected';
+  details?: {
+    staffId?: string;
+    staffName?: string;
+    clientName?: string;
+    date?: string;
+    time?: string;
+    purpose?: string;
+  };
 }
 
 // Always use backend server port (8080), not the client dev server port
@@ -67,6 +81,8 @@ export class CallService {
     clientName,
     onAccepted,
     onDeclined,
+    onEnded,
+    onAppointmentUpdate,
     onError,
   }: {
     targetStaffId?: string;
@@ -75,6 +91,8 @@ export class CallService {
     clientName?: string;
     onAccepted?: (callId: string, roomName: string) => void;
     onDeclined?: (reason?: string) => void;
+    onEnded?: (info: { callId: string; reason?: string }) => void;
+    onAppointmentUpdate?: (info: AppointmentUpdateEvent) => void;
     onError?: (error: Error) => void;
   }): Promise<{ callId: string; roomName: string } | null> {
     if (!ENABLE_UNIFIED) {
@@ -231,6 +249,8 @@ export class CallService {
         purpose,
         onAccepted,
         onDeclined,
+        onEnded,
+        onAppointmentUpdate,
         onError,
         pc,
         stream,
@@ -300,16 +320,23 @@ export class CallService {
         }
       };
 
+      const cleanup = () => {
+        socket.off('call:update', updateHandler);
+        socket.off('call:sdp', sdpHandler);
+        socket.off('call:ice', iceHandler);
+        socket.off('call.ended', endedHandler);
+        socket.off('call.appointment', appointmentHandler);
+        stream.getTracks().forEach((track) => track.stop());
+        pc.close();
+        this.activeCalls.delete(callId);
+      };
+
       // Listen for call updates
       const updateHandler = async ({ state, reason }: CallUpdateEvent) => {
         console.log('[CallService] Received call:update event:', { state, reason, callId });
         if (state === 'declined') {
           console.log('[CallService] Call declined, cleaning up...');
-          socket.off('call:update', updateHandler);
-          socket.off('call:sdp', sdpHandler);
-          socket.off('call:ice', iceHandler);
-          stream.getTracks().forEach(track => track.stop());
-          pc.close();
+          cleanup();
           if (callState.onDeclined) callState.onDeclined(reason);
         } else if (state === 'accepted') {
           console.log('[CallService] Call accepted! Notifying client...');
@@ -328,10 +355,29 @@ export class CallService {
           // Don't remove the handler yet - we might need it for other updates
         } else if (state === 'ringing') {
           console.log('[CallService] Call is ringing...');
+        } else if (state === 'ended') {
+          console.log('[CallService] Call ended, cleaning up...');
+          cleanup();
+          if (callState.onEnded) callState.onEnded({ callId, reason });
         }
       };
 
       socket.on('call:update', updateHandler);
+      const endedHandler = () => {
+        console.log('[CallService] Received call.ended event');
+        cleanup();
+        if (callState.onEnded) callState.onEnded({ callId });
+      };
+      socket.on('call.ended', endedHandler);
+      const appointmentHandler = (event: AppointmentUpdateEvent) => {
+        if (event.callId && event.callId !== callId) {
+          return;
+        }
+        if (callState.onAppointmentUpdate) {
+          callState.onAppointmentUpdate(event);
+        }
+      };
+      socket.on('call.appointment', appointmentHandler);
 
       // Store call data
       this.activeCalls.set(callId, { pc, stream, remoteStream: remoteStream || null });
@@ -345,16 +391,25 @@ export class CallService {
     }
   }
 
-  endCall(callId: string) {
+  async endCall(callId: string) {
     const callData = this.activeCalls.get(callId);
     if (callData) {
-      callData.stream.getTracks().forEach(track => track.stop());
+      callData.stream.getTracks().forEach((track) => track.stop());
       if (callData.remoteStream) {
-        callData.remoteStream.getTracks().forEach(track => track.stop());
+        callData.remoteStream.getTracks().forEach((track) => track.stop());
       }
       callData.pc.close();
     }
     this.activeCalls.delete(callId);
+
+    try {
+      await fetch(`${this.apiBase}/api/v1/calls/${callId}/end`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+      });
+    } catch (error) {
+      console.error('[CallService] Failed to end call via API:', error);
+    }
   }
 
   getActiveCall(callId: string): { pc: RTCPeerConnection; stream: MediaStream; remoteStream: MediaStream | null } | null {

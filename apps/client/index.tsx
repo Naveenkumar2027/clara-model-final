@@ -552,6 +552,7 @@ const App = () => {
     const chatContainerRef = useRef(null);
     const silenceStartRef = useRef(null);
     const isRecordingRef = useRef(false);
+    const lastEndedCallIdRef = useRef<string | null>(null);
     // Ref to store current preChatDetails for access in closures
     const preChatDetailsRef = useRef(null);
     // Accumulators for streaming transcriptions so full sentences are shown
@@ -844,6 +845,44 @@ const App = () => {
                         setActiveCall(null);
                         setVideoCallTarget(null);
                     },
+                    onEnded: ({ callId: endedCallId }) => {
+                        if (endedCallId && lastEndedCallIdRef.current === endedCallId) {
+                            lastEndedCallIdRef.current = null;
+                            return;
+                        }
+                        lastEndedCallIdRef.current = null;
+                        const staffName = staffToCall.name;
+                        finalizeCallSession(`Video call with ${staffName} ended. How can I assist you further?`, {
+                            notifyServer: false,
+                            showSummary: true,
+                        });
+                    },
+                    onAppointmentUpdate: ({ status, details }) => {
+                        const staffName = details?.staffName || staffToCall.name;
+                        const clientName = details?.clientName || preChatDetailsRef.current?.name || 'You';
+                        const scheduleInfo =
+                            details?.date && details?.time
+                                ? `${details.date} at ${details.time}`
+                                : 'soon';
+                        const purposeText = details?.purpose ? ` Purpose: ${details.purpose}.` : '';
+                        const message =
+                            status === 'confirmed'
+                                ? `Appointment confirmed with ${staffName} on ${scheduleInfo}.${purposeText}`
+                                : `Appointment with ${staffName} was declined.${purposeText}`;
+                        const timestamp = new Date().toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                        });
+                        setMessages((prev) => [
+                            ...prev,
+                            {
+                                sender: 'clara',
+                                text: message,
+                                isFinal: true,
+                                timestamp,
+                            },
+                        ]);
+                    },
                     onError: (error) => {
                         console.error('Call error:', error);
                         const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -943,6 +982,18 @@ const App = () => {
                             setView('chat');
                             setActiveCall(null);
                             setVideoCallTarget(null);
+                        },
+                        onEnded: ({ callId: endedCallId }) => {
+                            if (endedCallId && lastEndedCallIdRef.current === endedCallId) {
+                                lastEndedCallIdRef.current = null;
+                                return;
+                            }
+                            lastEndedCallIdRef.current = null;
+                            const staffName = staffToCall.name;
+                            finalizeCallSession(`Video call with ${staffName} ended. How can I assist you further?`, {
+                                notifyServer: false,
+                                showSummary: true,
+                            });
                         },
                         onError: (error) => {
                             console.error('Call error:', error);
@@ -1876,42 +1927,48 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
         }
     };
 
+    const finalizeCallSession = useCallback(
+        (message: string, options: { notifyServer?: boolean; showSummary?: boolean } = {}) => {
+            const { notifyServer = true, showSummary = true } = options;
+            callStore.endCall();
+            setToast({ type: 'ended', message });
+
+            const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            setMessages(prev => [...prev, { sender: 'clara', text: message, isFinal: true, timestamp }]);
+
+            if (activeCall && notifyServer) {
+                lastEndedCallIdRef.current = activeCall.callId;
+                if (unifiedCallService) {
+                    unifiedCallService.endCall(activeCall.callId);
+                } else {
+                    if (activeCall.stream) {
+                        activeCall.stream.getTracks().forEach(track => track.stop());
+                    }
+                    if (activeCall.remoteStream) {
+                        activeCall.remoteStream.getTracks().forEach(track => track.stop());
+                    }
+                }
+            } else {
+                lastEndedCallIdRef.current = null;
+            }
+
+            setActiveCall(null);
+            setView('chat');
+            setVideoCallTarget(null);
+            setShowEndSummary(showSummary);
+
+            if (sessionPromiseRef.current) {
+                setStatus('Clara is ready! Click the microphone to speak.');
+            } else {
+                setStatus('Click the microphone to speak');
+            }
+        },
+        [activeCall, unifiedCallService, callStore]
+    );
+
     const handleEndCall = () => {
-        // Update callStore
-        callStore.endCall();
-        setToast({ type: 'ended', message: 'Call ended' });
-        
-        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const staffName = videoCallTarget?.name || 'Staff';
-        setMessages(prev => [...prev, { sender: 'clara', text: `Video call with ${staffName} ended. How can I assist you further?`, isFinal: true, timestamp }]);
-        
-        // Cleanup active call
-        if (activeCall && unifiedCallService) {
-            // End call via CallService (cleans up peer connection and streams)
-            unifiedCallService.endCall(activeCall.callId);
-        } else if (activeCall) {
-            // Fallback cleanup
-            if (activeCall.stream) {
-                activeCall.stream.getTracks().forEach(track => track.stop());
-            }
-            if (activeCall.remoteStream) {
-                activeCall.remoteStream.getTracks().forEach(track => track.stop());
-            }
-        }
-        
-        setActiveCall(null);
-        setView('chat');
-        setVideoCallTarget(null);
-        
-        // Show end summary
-        setShowEndSummary(true);
-        
-        // Resume AI chat mode - ensure session is still active
-        if (sessionPromiseRef.current) {
-            setStatus('Clara is ready! Click the microphone to speak.');
-        } else {
-            setStatus('Click the microphone to speak');
-        }
+        finalizeCallSession(`Video call with ${staffName} ended. How can I assist you further?`, { notifyServer: true, showSummary: true });
     };
 
     const handleMicClick = async () => {
@@ -2256,6 +2313,17 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                                                     isFinal: true,
                                                     timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                                                 }]);
+                                            },
+                                            onEnded: ({ callId: endedCallId }) => {
+                                                if (endedCallId && lastEndedCallIdRef.current === endedCallId) {
+                                                    lastEndedCallIdRef.current = null;
+                                                    return;
+                                                }
+                                                lastEndedCallIdRef.current = null;
+                                                finalizeCallSession('Video call ended. Let me know if you need anything else.', {
+                                                    notifyServer: false,
+                                                    showSummary: true,
+                                                });
                                             },
                                             onError: (error) => {
                                                 console.error('Call error:', error);

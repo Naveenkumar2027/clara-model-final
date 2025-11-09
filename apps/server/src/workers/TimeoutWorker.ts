@@ -82,6 +82,7 @@ export class TimeoutWorker {
 
       // Emit to call room as well
       nsp.to(rooms.call(call.id)).emit('call:update', {
+        callId: call.id,
         state: 'missed',
         reason: 'Ring timeout',
       });

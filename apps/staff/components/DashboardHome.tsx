@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MOCK_APPOINTMENTS, MOCK_CALL_LOGS, MOCK_CALL_UPDATES, ACTIVITY_COLORS } from '../constants';
-import { TimetableEntry, Meeting, SemesterTimetable, SemesterClass, DayOfWeek } from '../types';
+import { ACTIVITY_COLORS } from '../constants';
+import {
+  TimetableEntry,
+  Meeting,
+  SemesterTimetable,
+  SemesterClass,
+  DayOfWeek,
+  CallUpdate,
+  PendingAppointment,
+  Appointment,
+} from '../types';
 
 const Card: React.FC<{ children: React.ReactNode; className?: string; title: string; icon: string }> = ({ children, className, title, icon }) => (
     <div className={`bg-slate-900/50 backdrop-blur-lg rounded-2xl border border-white/10 p-6 text-white ${className}`}>
@@ -630,14 +639,43 @@ const TimetableCard: React.FC<{
     );
 };
 
-const CallUpdatesCard: React.FC = () => (
-    <Card title="Call Updates" icon="fa-solid fa-phone-volume">
-        {MOCK_CALL_UPDATES.length === 0 ? (
-            <p className="text-slate-400">No recent calls.</p>
-        ) : (
-            <div>...</div>
-        )}
-    </Card>
+const CallUpdatesCard: React.FC<{ updates: CallUpdate[] }> = ({ updates }) => (
+  <Card title="Call Updates" icon="fa-solid fa-phone-volume">
+    {updates.length === 0 ? (
+      <p className="text-slate-400">No recent calls.</p>
+    ) : (
+      <div className="space-y-3">
+        {updates.map((update) => (
+          <div
+            key={update.id}
+            className="bg-slate-800/50 border border-white/10 rounded-lg px-4 py-3 flex items-center justify-between"
+          >
+            <div>
+              <p className="font-semibold text-white">{update.clientName}</p>
+              <p className="text-xs text-slate-400">
+                {update.direction === 'incoming' ? 'Incoming' : 'Outgoing'} call •{' '}
+                {new Date(update.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
+              {update.purpose && <p className="text-xs text-slate-500 mt-1 line-clamp-1">{update.purpose}</p>}
+            </div>
+            <span
+              className={`text-xs font-semibold px-3 py-1 rounded-full ${
+                update.status === 'answered'
+                  ? 'bg-green-500/20 text-green-400'
+                  : update.status === 'ringing'
+                  ? 'bg-yellow-500/20 text-yellow-400'
+                  : update.status === 'declined'
+                  ? 'bg-red-500/20 text-red-400'
+                  : 'bg-slate-700/40 text-slate-300'
+              }`}
+            >
+              {update.status.charAt(0).toUpperCase() + update.status.slice(1)}
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+  </Card>
 );
 
 const MeetingsCard: React.FC<{ meetings: Meeting[] }> = ({ meetings }) => (
@@ -665,49 +703,139 @@ const MeetingsCard: React.FC<{ meetings: Meeting[] }> = ({ meetings }) => (
 );
 
 
-const AppointmentsCard: React.FC = () => (
-    <Card title="Appointments" icon="fa-solid fa-handshake">
-         <div className="space-y-3">
-            {MOCK_APPOINTMENTS.map(apt => (
-                <div key={apt.id} className="bg-slate-800/50 p-3 rounded-lg flex justify-between items-center">
-                    <div>
-                        <p className="font-semibold">{apt.clientName}</p>
-                        <p className="text-sm text-slate-400 flex items-center space-x-2">
-                            <i className="fa-regular fa-clock"></i>
-                            <span>{apt.date}, {apt.time}</span>
-                        </p>
-                    </div>
-                    <span className={`px-3 py-1 text-xs rounded-full ${apt.status === 'Confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                        {apt.status}
-                    </span>
-                </div>
-            ))}
-        </div>
-    </Card>
+const AppointmentsCard: React.FC<{ appointments: Appointment[] }> = ({ appointments }) => (
+  <Card title="Appointments" icon="fa-solid fa-handshake">
+    {appointments.length === 0 ? (
+      <p className="text-slate-400">No appointments scheduled.</p>
+    ) : (
+      <div className="space-y-3">
+        {appointments.map((apt) => (
+          <div key={apt.id} className="bg-slate-800/50 p-3 rounded-lg flex justify-between items-center">
+            <div>
+              <p className="font-semibold">{apt.clientName}</p>
+              <p className="text-sm text-slate-400 flex items-center space-x-2">
+                <i className="fa-regular fa-clock"></i>
+                <span>
+                  {apt.date}, {apt.time}
+                </span>
+              </p>
+              {apt.purpose && <p className="text-xs text-slate-500 mt-1">{apt.purpose}</p>}
+            </div>
+            <span
+              className={`px-3 py-1 text-xs rounded-full ${
+                apt.status === 'Confirmed'
+                  ? 'bg-green-500/20 text-green-400'
+                  : apt.status === 'Pending'
+                  ? 'bg-yellow-500/20 text-yellow-400'
+                  : 'bg-red-500/20 text-red-400'
+              }`}
+            >
+              {apt.status}
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+  </Card>
+);
+
+const PendingAppointmentsCard: React.FC<{
+  items: PendingAppointment[];
+  onAccept: (id: string) => void;
+  onReject: (id: string) => void;
+}> = ({ items, onAccept, onReject }) => (
+  <Card title="Pending Appointments" icon="fa-solid fa-calendar-check">
+    {items.length === 0 ? (
+      <p className="text-slate-400">No pending appointments.</p>
+    ) : (
+      <div className="space-y-3">
+        {items.map((item) => (
+          <div key={item.id} className="bg-slate-800/50 p-4 rounded-xl border border-white/10">
+            <div className="flex justify-between items-start gap-4">
+              <div>
+                <p className="text-white font-semibold">{item.clientName}</p>
+                {item.purpose && <p className="text-xs text-slate-400 mt-1">{item.purpose}</p>}
+                <p className="text-xs text-slate-500 mt-1">
+                  Requested{' '}
+                  {new Date(item.requestedAt).toLocaleString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    day: 'numeric',
+                    month: 'short',
+                  })}
+                </p>
+                {item.scheduledFor && (item.scheduledFor.date || item.scheduledFor.time) && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Proposed: {item.scheduledFor.date || '—'}
+                    {item.scheduledFor.time ? ` at ${item.scheduledFor.time}` : ''}
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button
+                  onClick={() => onReject(item.id)}
+                  className="px-3 py-1 text-xs rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 transition"
+                >
+                  Reject
+                </button>
+                <button
+                  onClick={() => onAccept(item.id)}
+                  className="px-3 py-1 text-xs rounded-full bg-green-500/20 text-green-400 hover:bg-green-500/30 transition"
+                >
+                  Accept
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+  </Card>
 );
 
 interface DashboardHomeProps {
-    timetable: TimetableEntry[];
-    meetings: Meeting[];
-    semesterTimetable: SemesterTimetable | null;
-    selectedSemester: string;
-    onSemesterChange: (semester: string) => void;
+  timetable: TimetableEntry[];
+  meetings: Meeting[];
+  appointments: Appointment[];
+  callUpdates: CallUpdate[];
+  pendingAppointments: PendingAppointment[];
+  onAcceptPendingAppointment: (id: string) => void;
+  onRejectPendingAppointment: (id: string) => void;
+  semesterTimetable: SemesterTimetable | null;
+  selectedSemester: string;
+  onSemesterChange: (semester: string) => void;
 }
 
-const DashboardHome: React.FC<DashboardHomeProps> = ({ timetable, meetings, semesterTimetable, selectedSemester, onSemesterChange }) => {
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
-            <TimetableCard 
-                timetable={timetable} 
-                semesterTimetable={semesterTimetable} 
-                selectedSemester={selectedSemester}
-                onSemesterChange={onSemesterChange}
-            />
-            <CallUpdatesCard />
-            <MeetingsCard meetings={meetings} />
-            <AppointmentsCard />
-        </div>
-    );
+const DashboardHome: React.FC<DashboardHomeProps> = ({
+  timetable,
+  meetings,
+  appointments,
+  callUpdates,
+  pendingAppointments,
+  onAcceptPendingAppointment,
+  onRejectPendingAppointment,
+  semesterTimetable,
+  selectedSemester,
+  onSemesterChange,
+}) => {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-full">
+      <TimetableCard
+        timetable={timetable}
+        semesterTimetable={semesterTimetable}
+        selectedSemester={selectedSemester}
+        onSemesterChange={onSemesterChange}
+      />
+      <CallUpdatesCard updates={callUpdates} />
+      <MeetingsCard meetings={meetings} />
+      <PendingAppointmentsCard
+        items={pendingAppointments}
+        onAccept={onAcceptPendingAppointment}
+        onReject={onRejectPendingAppointment}
+      />
+      <AppointmentsCard appointments={appointments} />
+    </div>
+  );
 };
 
 export default DashboardHome;
