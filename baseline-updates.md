@@ -1,0 +1,43 @@
+# Baseline Updates (`baseline-updates`)
+
+Commit reference: `f180ba5` — *feat: Add system updates and improvements*
+
+This document captures the state that should be restored whenever a **revert** is requested.
+
+## Key Application Updates
+
+- **Client**
+  - `apps/client/index.html`
+  - `apps/client/index.tsx`
+  - `apps/client/src/services/CallService.ts`
+  - `apps/client/public/assets/svit-logo.png`
+- **Server**
+  - `apps/server/src/index.ts`
+  - `apps/server/src/routes/calls.ts`
+  - `apps/server/src/routes/staff.ts`
+  - `apps/server/src/socket.ts`
+- **Staff Interface**
+  - `apps/staff/components/Dashboard.tsx`
+  - `apps/staff/services/StaffRTC.ts`
+
+## Automated Test Additions
+
+Extensive Socket.IO, WebRTC, and timetable coverage added under `testsprite_tests/`, including:
+
+- `TC020` through `TC034` scenario tests
+- `run_all_tests.py`
+- Shared helpers in `testsprite_tests/test_utils/`
+- Supporting reports in `testsprite_tests/tmp/`
+
+## Revert Instructions
+
+To restore this baseline:
+
+```bash
+git reset --hard baseline-updates
+# or
+git reset --hard f180ba5
+```
+
+This resets the repository to the fully updated state described above.
+
