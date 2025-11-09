@@ -1,6 +1,6 @@
 # Baseline Updates (`baseline-updates`)
 
-Commit reference: `f180ba5` — *feat: Add system updates and improvements*
+Commit reference: `ddb1817` — *docs: add baseline revert instructions*
 
 This document captures the state that should be restored whenever a **revert** is requested.
 
@@ -36,7 +36,7 @@ To restore this baseline:
 ```bash
 git reset --hard baseline-updates
 # or
-git reset --hard f180ba5
+git reset --hard ddb1817
 ```
 
 This resets the repository to the fully updated state described above.
