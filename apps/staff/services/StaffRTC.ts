@@ -12,12 +12,14 @@ export interface CallIncomingEvent {
     clientId: string;
     name?: string;
     phone?: string;
+    avatar?: string;
   };
   purpose?: string;
   ts: number;
 }
 
 export interface CallUpdateEvent {
+  callId?: string;
   state: 'created' | 'ringing' | 'accepted' | 'declined' | 'ended';
   staffId?: string;
   reason?: string;
@@ -133,6 +135,7 @@ export class StaffRTC {
           clientId: event.client?.id || event.clientInfo?.clientId || event.clientInfo?.id || '',
           name: event.client?.name || event.clientInfo?.name,
           phone: event.client?.phone || event.clientInfo?.phone,
+          avatar: event.client?.avatar || event.clientInfo?.avatar,
         },
         purpose: event.reason || event.purpose,
         ts: event.createdAt || event.ts || Date.now(),
@@ -168,18 +171,24 @@ export class StaffRTC {
       onUpdate(event);
     };
 
-    socket.on('call:update', handleUpdate); // Old event name
+    socket.on('call:update', handleUpdate); // Old/new event payload contains callId now
     socket.on('call.accepted', (event: any) => {
-      handleUpdate({ state: 'accepted', staffId: event.staff?.id });
+        handleUpdate({ callId: event.callId, state: 'accepted', staffId: event.staff?.id });
     });
     socket.on('call.declined', (event: any) => {
-      handleUpdate({ state: 'declined', reason: event.reason });
+        handleUpdate({ callId: event.callId, state: 'declined', reason: event.reason });
     });
-    socket.on('call.canceled', () => {
-      handleUpdate({ state: 'ended', reason: 'Call canceled by client' });
+    socket.on('call.canceled', (event: any = {}) => {
+        handleUpdate({ callId: event.callId, state: 'ended', reason: 'Call canceled by client' });
     });
     socket.on('call.missed', (event: any) => {
-      handleUpdate({ state: 'ended', reason: event.reason || 'Call missed' });
+        handleUpdate({ callId: event.callId, state: 'ended', reason: event.reason || 'Call missed' });
+    });
+    socket.on('call.ended', (event: any) => {
+        handleUpdate({ callId: event.callId, state: 'ended' });
+        if (event.callId) {
+          this.endCall(event.callId);
+        }
     });
 
     // If socket is already connected, ensure room is joined immediately
@@ -445,12 +454,42 @@ export class StaffRTC {
     }
   }
 
-  endCall(callId: string) {
+  notifyAppointmentDecision(
+    callId: string,
+    status: 'confirmed' | 'rejected',
+    details: {
+      staffId: string;
+      staffName: string;
+      clientName: string;
+      date: string;
+      time: string;
+      purpose?: string;
+    }
+  ) {
+    if (!ENABLE_UNIFIED) return;
+    const socket = this.ensureSocket();
+    socket.emit('call:appointment', {
+      callId,
+      status,
+      details,
+    });
+  }
+
+  async endCall(callId: string) {
     const call = this.activeCalls.get(callId);
     if (call) {
       call.stream.getTracks().forEach((t) => t.stop());
       call.pc.close();
       this.activeCalls.delete(callId);
+    }
+
+    try {
+      await fetch(`${this.apiBase}/api/v1/calls/${callId}/end`, {
+        method: 'POST',
+        headers: this.getHeaders(),
+      });
+    } catch (error) {
+      console.error('Failed to end call:', error);
     }
   }
 

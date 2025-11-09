@@ -58,21 +58,41 @@ export interface Appointment {
   purpose: string;
   date: string;
   time: string;
-  status: "Pending" | "Confirmed" | "Rejected";
+  status: 'Pending' | 'Confirmed' | 'Rejected';
+  staffId?: string;
 }
 
 export interface CallLog {
-    id: string;
-    clientName: string;
-    duration: string;
-    status: 'completed' | 'missed' | 'rejected';
-    timestamp: string;
+  id: string;
+  clientName: string;
+  duration: string;
+  status: 'completed' | 'missed' | 'rejected';
+  timestamp: string;
 }
 
+export type CallDirection = 'incoming' | 'outgoing';
+
 export interface CallUpdate {
-    id: string;
-    clientName: string;
-    purpose: string;
+  id: string;
+  callId: string;
+  clientName: string;
+  timestamp: number;
+  direction: CallDirection;
+  status: 'ringing' | 'answered' | 'missed' | 'ended' | 'declined';
+  purpose?: string;
+}
+
+export interface PendingAppointment {
+  id: string;
+  callId: string;
+  clientName: string;
+  staffId: string;
+  purpose?: string;
+  requestedAt: number;
+  scheduledFor?: {
+    date?: string;
+    time?: string;
+  };
 }
 
 export interface Task {
