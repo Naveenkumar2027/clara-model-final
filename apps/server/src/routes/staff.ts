@@ -74,6 +74,38 @@ export function createStaffRoutes(
     }
   });
 
+  // PUT /v1/staff/availability - Set availability status (alternative method)
+  router.put('/v1/staff/availability', async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const parsed = availabilitySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: parsed.error.message });
+      }
+
+      const user = req.user!;
+      if (user.role !== 'staff') {
+        return res.status(403).json({ error: 'Only staff can set availability' });
+      }
+
+      const { status, orgId, skills } = parsed.data;
+      const effectiveOrgId = orgId || user.orgId || 'default';
+
+      const availability: StaffAvailability = {
+        userId: user.userId,
+        orgId: effectiveOrgId,
+        status,
+        updatedAt: Date.now(),
+        skills,
+      };
+
+      await availabilityRepo.setAvailability(availability);
+      res.json({ success: true, availability });
+    } catch (error: any) {
+      console.error('[Staff API] Error setting availability:', error);
+      res.status(500).json({ error: 'Failed to set availability' });
+    }
+  });
+
   return router;
 }
 

@@ -225,13 +225,38 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
     setGroups(savedGroups ? JSON.parse(savedGroups) : []);
 
     // Initialize unified RTC if enabled
-    const enableUnified = import.meta.env.VITE_ENABLE_UNIFIED_MODE === 'true';
+    const enableUnified = (import.meta.env.VITE_ENABLE_UNIFIED_MODE ?? 'true') === 'true';
     if (enableUnified && user) {
-      let token = localStorage.getItem('clara-jwt-token');
+      const apiBase = import.meta.env.VITE_API_BASE || 
+        (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
+
+      const getStoredToken = () =>
+        localStorage.getItem('token') || localStorage.getItem('clara-jwt-token') || null;
+
+      const storeToken = (tokenValue: string) => {
+        localStorage.setItem('token', tokenValue);
+        localStorage.setItem('clara-jwt-token', tokenValue);
+      };
+
+      const ensureAvailability = async (tokenValue: string) => {
+        try {
+          await fetch(`${apiBase}/api/v1/staff/availability`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${tokenValue}`,
+            },
+            body: JSON.stringify({ status: 'available', orgId: 'default' }),
+          });
+          console.log('[Dashboard] Staff availability set to available');
+        } catch (error) {
+          console.error('[Dashboard] Failed to set staff availability:', error);
+        }
+      };
+
+      let token = getStoredToken();
       if (!token) {
         // Auto-login for demo
-        const apiBase = import.meta.env.VITE_API_BASE || 
-          (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
         fetch(`${apiBase}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -243,13 +268,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
           }),
         })
           .then((res) => res.json())
-          .then((data) => {
+          .then(async (data) => {
             token = data.token;
             if (token) {
-              localStorage.setItem('clara-jwt-token', token);
+              storeToken(token);
+              await ensureAvailability(token);
+              // Extract email prefix as staffId (e.g., "anithacs" from "anithacs@gmail.com")
+              // This matches the format the client uses when calling
+              const staffId = user.email?.split('@')[0] || user.id;
               const rtc = new StaffRTC({
                 token,
-                staffId: user.id,
+                staffId: staffId,
               });
               rtc.attachHandlers({
                 onIncoming: (call) => {
@@ -264,9 +293,13 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
           })
           .catch(console.error);
       } else {
+        void ensureAvailability(token);
+        // Extract email prefix as staffId (e.g., "anithacs" from "anithacs@gmail.com")
+        // This matches the format the client uses when calling
+        const staffId = user.email?.split('@')[0] || user.id;
         const rtc = new StaffRTC({
           token,
-          staffId: user.id,
+          staffId: staffId,
         });
         rtc.attachHandlers({
           onIncoming: (call) => {

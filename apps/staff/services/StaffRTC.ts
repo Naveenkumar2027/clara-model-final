@@ -48,11 +48,15 @@ export class StaffRTC {
   }
 
   private getHeaders() {
-    // Always get the latest token from localStorage in case it was refreshed
-    const latestToken = localStorage.getItem('clara-jwt-token') || this.token;
-    if (latestToken !== this.token) {
-      this.token = latestToken;
+    const storedToken =
+      localStorage.getItem('token') ||
+      localStorage.getItem('clara-jwt-token') ||
+      this.token;
+
+    if (storedToken && storedToken !== this.token) {
+      this.token = storedToken;
     }
+
     return {
       Authorization: `Bearer ${this.token}`,
       'Content-Type': 'application/json',
@@ -116,13 +120,29 @@ export class StaffRTC {
     socket.off('call.missed');
 
     // Attach event handlers - support both old and new event names
-    const handleIncoming = (event: CallIncomingEvent) => {
+    const handleIncoming = (event: any) => {
       console.log('[StaffRTC] ===== RECEIVED INCOMING CALL EVENT =====');
-      console.log('[StaffRTC] Event:', JSON.stringify(event, null, 2));
-      console.log('[StaffRTC] Call ID:', event.callId);
-      console.log('[StaffRTC] Client Info:', event.clientInfo);
+      console.log('[StaffRTC] Raw event:', JSON.stringify(event, null, 2));
+      
+      // Map server event format to expected CallIncomingEvent format
+      // Server sends: { callId, client: { id, name, avatar }, reason, createdAt }
+      // Expected: { callId, clientInfo: { clientId, name, phone }, purpose, ts }
+      const mappedEvent: CallIncomingEvent = {
+        callId: event.callId,
+        clientInfo: {
+          clientId: event.client?.id || event.clientInfo?.clientId || event.clientInfo?.id || '',
+          name: event.client?.name || event.clientInfo?.name,
+          phone: event.client?.phone || event.clientInfo?.phone,
+        },
+        purpose: event.reason || event.purpose,
+        ts: event.createdAt || event.ts || Date.now(),
+      };
+      
+      console.log('[StaffRTC] Mapped event:', JSON.stringify(mappedEvent, null, 2));
+      console.log('[StaffRTC] Call ID:', mappedEvent.callId);
+      console.log('[StaffRTC] Client Info:', mappedEvent.clientInfo);
       console.log('[StaffRTC] Calling onIncoming handler...');
-      onIncoming(event);
+      onIncoming(mappedEvent);
       console.log('[StaffRTC] ✅ onIncoming handler called');
     };
 

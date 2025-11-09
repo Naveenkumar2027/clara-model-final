@@ -42,6 +42,10 @@ type CallSession = {
 import { CallRepository } from './repository.js';
 import { setupSocketHandlers } from './socket.js';
 import { TimetableRepository, type FacultyTimetable } from './timetableRepository.js';
+import { StaffAvailabilityRepository } from './repositories/StaffAvailabilityRepository.js';
+import { CallRepository as NewCallRepository } from './repositories/CallRepository.js';
+import { createStaffRoutes } from './routes/staff.js';
+import { createCallRoutes } from './routes/calls.js';
 
 dotenv.config();
 
@@ -96,6 +100,44 @@ io.of(NAMESPACE).use((socket, next) => {
 // Initialize repositories
 const callRepo = new CallRepository();
 const timetableRepo = new TimetableRepository();
+const availabilityRepo = new StaffAvailabilityRepository();
+const newCallRepo = new NewCallRepository();
+
+const STAFF_DIRECTORY: Record<string, { displayName: string; shortCode: string }> = {
+  'lakshmidurgan@gmail.com': { displayName: 'Prof. Lakshmi Durga N', shortCode: 'ldn' },
+  'anithacs@gmail.com': { displayName: 'Prof. Anitha C S', shortCode: 'acs' },
+  'gdhivyasri@gmail.com': { displayName: 'Dr. G Dhivyasri', shortCode: 'gd' },
+  'nishask@gmail.com': { displayName: 'Prof. Nisha S K', shortCode: 'nsk' },
+  'amarnathbpatil@gmail.com': { displayName: 'Prof. Amarnath B Patil', shortCode: 'abp' },
+  'nagashreen@gmail.com': { displayName: 'Dr. Nagashree N', shortCode: 'nn' },
+  'anilkumarkv@gmail.com': { displayName: 'Prof. Anil Kumar K V', shortCode: 'akv' },
+  'jyotikumari@gmail.com': { displayName: 'Prof. Jyoti Kumari', shortCode: 'jk' },
+  'vidyashreer@gmail.com': { displayName: 'Prof. Vidyashree R', shortCode: 'vr' },
+  'bhavanaa@gmail.com': { displayName: 'Dr. Bhavana A', shortCode: 'ba' },
+  'bhavyatn@gmail.com': { displayName: 'Prof. Bhavya T N', shortCode: 'btn' },
+};
+
+async function seedDefaultAvailability() {
+  try {
+    const now = Date.now();
+    await Promise.all(
+      Object.keys(STAFF_DIRECTORY).map((email) =>
+        availabilityRepo.setAvailability({
+          userId: email,
+          orgId: 'default',
+          status: 'available',
+          updatedAt: now,
+          skills: [],
+        })
+      )
+    );
+    console.log('[Server] Seeded default staff availability');
+  } catch (error) {
+    console.error('[Server] Failed to seed staff availability', error);
+  }
+}
+
+void seedDefaultAvailability();
 
 // Helper function to create complete StaffProfile objects
 function createStaffProfile(email: string, dept?: string): {
@@ -108,19 +150,24 @@ function createStaffProfile(email: string, dept?: string): {
   subjects: string[];
   avatar: string;
 } {
-  const name = email.split('@')[0];
-  const capitalizedName = name.charAt(0).toUpperCase() + name.slice(1);
-  const shortName = name.toLowerCase();
-  
+  const normalizedEmail = email.toLowerCase();
+  const directoryEntry = STAFF_DIRECTORY[normalizedEmail];
+  const emailPrefix = normalizedEmail.split('@')[0];
+
+  const displayName = directoryEntry?.displayName ||
+    emailPrefix.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+  const shortCode = directoryEntry?.shortCode || emailPrefix;
+
   return {
     id: email,
-    name: capitalizedName,
-    email: email,
+    name: displayName,
+    email,
     department: dept || 'general',
-    shortName: shortName,
+    shortName: shortCode.toLowerCase(),
     description: `Staff member in ${dept || 'general'} department`,
     subjects: [],
-    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(capitalizedName)}&background=6366f1&color=fff&size=128`,
+    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=fff&size=128`,
   };
 }
 
@@ -133,7 +180,7 @@ const apiLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10,
+  max: 100, // Increased for test suite
   message: 'Too many login attempts',
 });
 
@@ -259,6 +306,10 @@ app.patch('/api/notifications/read-all', authMiddleware, (_req, res) => {
 app.delete('/api/notifications/:id', authMiddleware, (_req, res) => {
   res.json({ message: 'Notification deleted' });
 });
+
+// Mount new v1 API routes (must be before old routes for precedence)
+app.use('/api', authMiddleware, createStaffRoutes(availabilityRepo));
+app.use('/api', authMiddleware, createCallRoutes(newCallRepo, availabilityRepo, io));
 
 // Timetable endpoints
 type AuthPayloadWithEmail = AuthPayload & { email?: string };

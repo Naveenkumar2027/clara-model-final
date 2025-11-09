@@ -100,6 +100,60 @@ const MapIcon = ({size=16}) => (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"></path></svg>
 );
 
+const SVITLogo = () => {
+    return (
+        <svg className="svit-logo-image" viewBox="0 0 200 240" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <radialGradient id="sunGradient" cx="50%" cy="35%">
+                    <stop offset="0%" style={{stopColor:"#ffeb3b", stopOpacity:1}} />
+                    <stop offset="100%" style={{stopColor:"#ff9800", stopOpacity:1}} />
+                </radialGradient>
+                <linearGradient id="flameGradient" x1="50%" y1="0%" x2="50%" y2="100%">
+                    <stop offset="0%" style={{stopColor:"#ff4444", stopOpacity:1}} />
+                    <stop offset="50%" style={{stopColor:"#ff0000", stopOpacity:1}} />
+                    <stop offset="100%" style={{stopColor:"#cc0000", stopOpacity:1}} />
+                </linearGradient>
+            </defs>
+            
+            {/* Outer circle borders */}
+            <circle cx="100" cy="100" r="95" fill="none" stroke="#dc2626" strokeWidth="2"/>
+            <circle cx="100" cy="100" r="88" fill="none" stroke="#ffffff" strokeWidth="3"/>
+            <circle cx="100" cy="100" r="82" fill="none" stroke="#dc2626" strokeWidth="2"/>
+            
+            {/* Inner circle with gradient background */}
+            <circle cx="100" cy="100" r="78" fill="url(#sunGradient)"/>
+            
+            {/* Sun rays */}
+            {Array.from({length: 20}, (_, i) => {
+                const angle = (i * 360 / 20) * Math.PI / 180;
+                const x1 = 100 + Math.cos(angle) * 75;
+                const y1 = 100 + Math.sin(angle) * 75;
+                const x2 = 100 + Math.cos(angle) * 82;
+                const y2 = 100 + Math.sin(angle) * 82;
+                return (
+                    <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#ff9800" strokeWidth="1.5" opacity="0.7"/>
+                );
+            })}
+            
+            {/* Book at bottom */}
+            <rect x="75" y="140" width="50" height="38" fill="#2c2c2c" rx="3"/>
+            <rect x="80" y="145" width="40" height="28" fill="#ffffff" rx="1"/>
+            <line x1="100" y1="145" x2="100" y2="173" stroke="#2c2c2c" strokeWidth="1.5"/>
+            <line x1="85" y1="152" x2="115" y2="152" stroke="#e0e0e0" strokeWidth="0.5"/>
+            <line x1="85" y1="158" x2="115" y2="158" stroke="#e0e0e0" strokeWidth="0.5"/>
+            <line x1="85" y1="164" x2="115" y2="164" stroke="#e0e0e0" strokeWidth="0.5"/>
+            
+            {/* Flame rising from book */}
+            <path d="M 95 140 Q 90 115, 100 105 Q 110 115, 105 140 Z" fill="url(#flameGradient)" stroke="#ff6600" strokeWidth="1"/>
+            <ellipse cx="100" cy="110" rx="4" ry="10" fill="#ffffff" opacity="0.6"/>
+            
+            {/* Text on circle ring - SAI VIDYA INSTITUTE */}
+            <text x="100" y="25" textAnchor="middle" fontSize="9" fill="#333" fontFamily="Arial, sans-serif" fontWeight="bold">SAI VIDYA INSTITUTE</text>
+            <text x="100" y="38" textAnchor="middle" fontSize="8" fill="#333" fontFamily="Arial, sans-serif">OF TECHNOLOGY</text>
+        </svg>
+    );
+};
+
 const WelcomeScreen = ({ onStartConversation }) => {
     return (
         <div className="welcome-screen">
@@ -110,17 +164,11 @@ const WelcomeScreen = ({ onStartConversation }) => {
             <div className="welcome-content">
                 <div className="welcome-logo-section">
                     <div className="svit-logo">
-                        <div className="logo-circle">
-                            <div className="logo-flame"></div>
-                        </div>
-                        <div className="logo-text">
-                            <div className="logo-sanskrit">श्रद्धावान</div>
-                            <div className="logo-sanskrit">लभ ते ज्ञान</div>
-                        </div>
-                        <div className="logo-acronym">
-                            <div className="svit">SVIT</div>
-                            <div className="motto">Learn to Lead</div>
-                        </div>
+                        <img 
+                            src="/assets/svit-logo.png" 
+                            alt="SVIT Logo" 
+                            className="svit-logo-image"
+                        />
                     </div>
                     <div className="institute-name">
                         <h2 className="sai-vidya">SAI VIDYA</h2>
@@ -490,9 +538,6 @@ const App = () => {
     const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
     const [currentFloor, setCurrentFloor] = useState(0);
     const locationMatcher = useRef(new LocationMatcher()).current;
-    // Call confirmation states (from local)
-    const [showCallConfirmation, setShowCallConfirmation] = useState(false);
-    const [pendingCall, setPendingCall] = useState<{ staff: any } | null>(null);
     
     const sessionPromiseRef = useRef(null);
     const inputAudioContextRef = useRef(null);
@@ -725,6 +770,7 @@ const App = () => {
                 const result = await unifiedCallService.startCall({
                     targetStaffId: emailPrefix, // Use email prefix instead of shortName
                     purpose: 'Voice-initiated video call',
+                    clientName: preChatDetailsRef.current?.name, // Send client name from prechat
                     onAccepted: (callId, roomName) => {
                         console.log('[Client] ===== CALL ACCEPTED =====');
                         console.log('[Client] Call ID:', callId, 'Room:', roomName);
@@ -879,6 +925,7 @@ const App = () => {
                     const retryResult = await service.startCall({
                         targetStaffId: staffToCall.email.split('@')[0],
                         purpose: 'Voice-initiated video call',
+                        clientName: preChatDetailsRef.current?.name, // Send client name from prechat
                         onAccepted: (callId, roomName) => {
                             console.log('Call accepted:', callId, 'Room:', roomName);
                             setActiveCall({
@@ -955,10 +1002,8 @@ const App = () => {
             stopRecording(false);
         }
 
-        // Show confirmation dialog instead of immediately starting call
-        setPendingCall({ staff: staffToCall });
-        setShowCallConfirmation(true);
-    }, [stopRecording, isDemoMode]);
+        startCallAfterConfirmation(staffToCall);
+    }, [stopRecording, isDemoMode, startCallAfterConfirmation]);
 
     // Helper function to detect if query is college-related
     const isCollegeQuery = (text: string): boolean => {
@@ -2043,96 +2088,6 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
         setShowPreChatModal(true);
     };
 
-    // Handle call confirmation
-    const handleConfirmCall = useCallback(async () => {
-        if (!pendingCall?.staff) return;
-        
-        setShowCallConfirmation(false);
-        const staffToCall = pendingCall.staff;
-        setPendingCall(null);
-        
-        // Now start the actual call
-        await startCallAfterConfirmation(staffToCall);
-    }, [pendingCall, startCallAfterConfirmation]);
-
-    const handleCancelCall = useCallback(() => {
-        setShowCallConfirmation(false);
-        setPendingCall(null);
-        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        setMessages(prev => [...prev, { sender: 'clara', text: 'Call cancelled.', isFinal: true, timestamp }]);
-    }, []);
-    
-    // Call Confirmation Dialog Component
-    const CallConfirmationDialog = () => {
-        if (!showCallConfirmation || !pendingCall?.staff) return null;
-        
-        return (
-            <div className="modal-overlay" style={{ 
-                position: 'fixed', 
-                top: 0, 
-                left: 0, 
-                right: 0, 
-                bottom: 0, 
-                backgroundColor: 'rgba(0, 0, 0, 0.7)', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                zIndex: 10000 
-            }}>
-                <div className="modal-content" style={{ 
-                    backgroundColor: 'white', 
-                    padding: '30px', 
-                    borderRadius: '12px', 
-                    maxWidth: '400px', 
-                    width: '90%',
-                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
-                }}>
-                    <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-                        <VideoCallHeaderIcon size={48} />
-                        <h2 style={{ marginTop: '15px', marginBottom: '10px', fontSize: '20px', fontWeight: '600' }}>
-                            Start Video Call?
-                        </h2>
-                        <p style={{ color: '#666', fontSize: '14px' }}>
-                            Would you like to start a video call with <strong>{pendingCall.staff.name}</strong>?
-                        </p>
-                    </div>
-                    <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
-                        <button 
-                            onClick={handleCancelCall}
-                            style={{
-                                padding: '12px 24px',
-                                borderRadius: '8px',
-                                border: '1px solid #ddd',
-                                backgroundColor: 'white',
-                                color: '#333',
-                                cursor: 'pointer',
-                                fontSize: '14px',
-                                fontWeight: '500'
-                            }}
-                        >
-                            Cancel
-                        </button>
-                        <button 
-                            onClick={handleConfirmCall}
-                            style={{
-                                padding: '12px 24px',
-                                borderRadius: '8px',
-                                border: 'none',
-                                backgroundColor: '#6964D9',
-                                color: 'white',
-                                cursor: 'pointer',
-                                fontSize: '14px',
-                                fontWeight: '500'
-                            }}
-                        >
-                            Yes, Start Call
-                        </button>
-                    </div>
-                </div>
-            </div>
-        );
-    };
-
     const renderContent = () => {
         if (showWelcomeScreen) {
             return <WelcomeScreen onStartConversation={handleWelcomeStart} />;
@@ -2226,7 +2181,6 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
         }
         return (
             <>
-                <CallConfirmationDialog />
                 {/* Device Permission Prompt */}
                 <DevicePermissionPrompt
                     visible={showPermissionPrompt}
@@ -2284,6 +2238,7 @@ You are CLARA, the official, friendly, and professional AI receptionist for Sai 
                                         const result = await unifiedCallService.startCall({
                                             department: 'general',
                                             purpose: 'Client video call',
+                                            clientName: preChatDetailsRef.current?.name, // Send client name from prechat
                                             onAccepted: (callId, roomName) => {
                                                 console.log('Call accepted:', callId, roomName);
                                                 // Handle accepted call - could show video UI

@@ -21,6 +21,33 @@ const rooms = {
   org: (id: string) => `org:${id}`,
 };
 
+// Map staff short codes (e.g., "acs", "ldn") to email prefixes (e.g., "anithacs", "lakshmidurgan")
+// This matches the client's staffList mapping
+const STAFF_CODE_TO_EMAIL_PREFIX: Record<string, string> = {
+  'ldn': 'lakshmidurgan',
+  'acs': 'anithacs',
+  'gd': 'gdhivyasri',
+  'nsk': 'nishask',
+  'abp': 'amarnathbpatil',
+  'nn': 'nagashreen',
+  'akv': 'anilkumarkv',
+  'jk': 'jyotikumari',
+  'vr': 'vidyashreer',
+  'ba': 'bhavanaa',
+  'btn': 'bhavyatn',
+};
+
+// Helper function to normalize staffId - converts short codes to email prefixes
+function normalizeStaffId(staffId: string): string {
+  const lowerStaffId = staffId.toLowerCase();
+  // If it's a known short code, return the email prefix
+  if (STAFF_CODE_TO_EMAIL_PREFIX[lowerStaffId]) {
+    return STAFF_CODE_TO_EMAIL_PREFIX[lowerStaffId];
+  }
+  // Otherwise, assume it's already an email prefix
+  return staffId;
+}
+
 type AuthPayload = {
   userId: string;
   role: 'client' | 'staff';
@@ -43,6 +70,7 @@ export function createCallRoutes(
   const initiateSchema = z.object({
     orgId: z.string().optional(),
     clientId: z.string(),
+    clientName: z.string().optional(), // Client name from prechat form
     reason: z.string().optional(),
     targetStaffId: z.string().optional(),
     department: z.string().optional(),
@@ -55,7 +83,7 @@ export function createCallRoutes(
         return res.status(400).json({ error: parsed.error.message });
       }
 
-      const { orgId, clientId, reason, targetStaffId, department } = parsed.data;
+      const { orgId, clientId, clientName, reason, targetStaffId, department } = parsed.data;
       const user = req.user!;
       const effectiveOrgId = orgId || user.orgId || 'default';
 
@@ -88,10 +116,27 @@ export function createCallRoutes(
       let availableStaff: { userId: string; staffId?: string }[] = [];
       
       if (targetStaffId) {
-        // Direct call to specific staff
-        const availability = await availabilityRepo.getAvailability(targetStaffId, effectiveOrgId);
+        // Normalize targetStaffId - convert short code (e.g., "acs") to email prefix (e.g., "anithacs")
+        const normalizedStaffId = normalizeStaffId(targetStaffId);
+        console.log(`[Calls API] Normalized staffId: ${targetStaffId} -> ${normalizedStaffId}`);
+        
+        // Direct call to specific staff - try multiple formats:
+        // 1. Try with @gmail.com suffix (full email) - most common format
+        // 2. Try normalized staffId (email prefix)
+        // 3. Try original targetStaffId
+        const emailFormat = `${normalizedStaffId}@gmail.com`;
+        let availability = await availabilityRepo.getAvailability(emailFormat, effectiveOrgId);
+        if (!availability || availability.status !== 'available') {
+          availability = await availabilityRepo.getAvailability(normalizedStaffId, effectiveOrgId);
+        }
+        if (!availability || availability.status !== 'available') {
+          availability = await availabilityRepo.getAvailability(targetStaffId, effectiveOrgId);
+        }
+        
         if (availability && availability.status === 'available') {
-          availableStaff = [{ userId: targetStaffId, staffId: targetStaffId }];
+          // Use the userId from availability record (which has the correct format)
+          // but use normalized staffId for room emission
+          availableStaff = [{ userId: availability.userId, staffId: normalizedStaffId }];
         }
       } else {
         // Find available staff in org/department
@@ -132,14 +177,19 @@ export function createCallRoutes(
 
       // Emit call.initiated to all available staff
       const nsp = io.of(NAMESPACE);
+      // Use clientName from request if provided, otherwise fallback to user.userId
+      const displayName = clientName || user.userId;
       const clientInfo = {
         id: clientId,
-        name: user.userId,
-        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(user.userId)}&background=6366f1&color=fff`,
+        name: displayName,
+        avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=6366f1&color=fff`,
       };
 
       for (const staff of availableStaff) {
-        nsp.to(rooms.staff(staff.staffId || staff.userId)).emit('call.initiated', {
+        const staffIdForRoom = staff.staffId || staff.userId;
+        const staffRoom = rooms.staff(staffIdForRoom);
+        console.log(`[Calls API] Emitting to staff room: ${staffRoom} (staffId: ${staffIdForRoom})`);
+        nsp.to(staffRoom).emit('call.initiated', {
           callId,
           client: clientInfo,
           reason,
@@ -311,9 +361,23 @@ export function createCallRoutes(
         return res.status(404).json({ error: 'Call not found' });
       }
 
-      // Either party can end
-      const isParticipant = call.createdByUserId === user.userId || 
-                           call.acceptedByUserId === user.userId;
+      // Either party can end - handle userId format mismatches
+      // Extract staffId from user (could be email prefix or direct staffId)
+      const userStaffId = user.staffId || (user.userId.includes('@') ? user.userId.split('@')[0] : user.userId);
+      const normalizedUserStaffId = userStaffId.toLowerCase();
+      
+      // Check if user is the creator
+      const isCreator = call.createdByUserId === user.userId || call.createdByUserId === userStaffId;
+      
+      // Check if user is the accepter (handle both email and staffId formats)
+      const acceptedByStaffId = call.acceptedByUserId ? 
+        (call.acceptedByUserId.includes('@') ? call.acceptedByUserId.split('@')[0] : call.acceptedByUserId).toLowerCase() : 
+        null;
+      const isAccepter = call.acceptedByUserId === user.userId || 
+                         call.acceptedByUserId === userStaffId ||
+                         (acceptedByStaffId && acceptedByStaffId === normalizedUserStaffId);
+      
+      const isParticipant = isCreator || isAccepter;
       
       if (!isParticipant) {
         return res.status(403).json({ error: 'Not a participant in this call' });

@@ -64,6 +64,7 @@ export class CallService {
     targetStaffId,
     department,
     purpose,
+    clientName,
     onAccepted,
     onDeclined,
     onError,
@@ -71,6 +72,7 @@ export class CallService {
     targetStaffId?: string;
     department?: string;
     purpose?: string;
+    clientName?: string;
     onAccepted?: (callId: string, roomName: string) => void;
     onDeclined?: (reason?: string) => void;
     onError?: (error: Error) => void;
@@ -82,10 +84,15 @@ export class CallService {
 
     try {
       // Initiate call using new v1 API endpoint
+      const requestBody: any = { clientId: this.clientId, targetStaffId, department, reason: purpose };
+      if (clientName) {
+        requestBody.clientName = clientName;
+      }
+      
       let res = await fetch(`${this.apiBase}/api/v1/calls`, {
         method: 'POST',
         headers: this.getHeaders(),
-        body: JSON.stringify({ clientId: this.clientId, targetStaffId, department, reason: purpose }),
+        body: JSON.stringify(requestBody),
       });
 
       // If 401, refresh token and retry

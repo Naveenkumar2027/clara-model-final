@@ -1,8 +1,14 @@
 import { Namespace } from 'socket.io';
 import { CallRepository as OldCallRepository } from './repository.js';
 import { CallRepository } from './repositories/CallRepository.js';
-import { SessionRepository } from './models/Session.js';
-import { AppointmentRepository } from './models/Appointment.js';
+
+type AppointmentRepository = {
+  findByStaff: (staffId: string, filter?: { status?: string }) => Promise<any[]>;
+  get: (appointmentId: string) => Promise<any | undefined>;
+  update: (appointment: any) => Promise<void>;
+};
+
+type SessionRepository = unknown;
 
 type AuthPayload = {
   userId: string;
@@ -36,10 +42,13 @@ export function setupSocketHandlers(
     console.log(`[Socket] Full user payload:`, JSON.stringify(user, null, 2));
     
     // Join role-based rooms
-    if (user.role === 'staff' && user.staffId) {
-      const staffRoom = rooms.staff(user.staffId);
+    if (user.role === 'staff') {
+      // Extract staffId from email prefix if staffId is not set, or use staffId directly
+      // This handles both email-based (e.g., "anithacs") and short code (e.g., "acs") formats
+      const staffId = user.staffId || (user.userId.includes('@') ? user.userId.split('@')[0] : user.userId);
+      const staffRoom = rooms.staff(staffId);
       socket.join(staffRoom);
-      console.log(`[Socket] ✅ Staff ${user.staffId} joined room: ${staffRoom}`);
+      console.log(`[Socket] ✅ Staff ${staffId} (userId: ${user.userId}) joined room: ${staffRoom}`);
       
       // Verify room membership immediately
       const roomSockets = await nsp.in(staffRoom).fetchSockets();
@@ -62,9 +71,9 @@ export function setupSocketHandlers(
       console.log(`[Socket] Staff ${user.staffId} joined org room: ${orgRoom}`);
 
       // Send pending notifications to staff on connect
-      if (appointmentRepo) {
+      if (appointmentRepo && staffId) {
         try {
-          const pendingAppointments = await appointmentRepo.findByStaff(user.staffId, { status: 'Pending' });
+          const pendingAppointments = await appointmentRepo.findByStaff(staffId, { status: 'Pending' });
           if (pendingAppointments.length > 0) {
             socket.emit('notifications:appointments', {
               type: 'pending_appointments',
@@ -98,10 +107,16 @@ export function setupSocketHandlers(
       console.log(`[Socket] User userId: ${user.userId}`);
       console.log(`[Socket] Socket ID: ${socket.id}`);
       
-      if (user.role === 'staff' && user.staffId === staffId) {
-        const staffRoom = rooms.staff(staffId);
-        socket.join(staffRoom);
-        console.log(`[Socket] ✅ Staff ${staffId} successfully joined room: ${staffRoom}`);
+      if (user.role === 'staff') {
+        // Extract staffId from user (email prefix or staffId)
+        const userStaffId = user.staffId || (user.userId.includes('@') ? user.userId.split('@')[0] : user.userId);
+        
+        // Allow joining if staffId matches (direct match) or if userId matches (email prefix match)
+        // Also handle short code matching (e.g., "acs" should match "anithacs")
+        if (userStaffId === staffId || user.userId === staffId || user.userId.startsWith(staffId + '@')) {
+          const staffRoom = rooms.staff(staffId);
+          socket.join(staffRoom);
+          console.log(`[Socket] ✅ Staff ${staffId} (userId: ${user.userId}) successfully joined room: ${staffRoom}`);
         
         // Verify room membership immediately
         nsp.in(staffRoom).fetchSockets().then(sockets => {
@@ -111,10 +126,14 @@ export function setupSocketHandlers(
             console.log(`[Socket]   - Socket ${s.id}: userId=${sUser?.userId}, staffId=${sUser?.staffId}`);
           });
         });
+        } else {
+          console.error(`[Socket] ❌ join:staff REJECTED - staffId mismatch`);
+          console.error(`[Socket] Expected: staffId=${staffId}`);
+          console.error(`[Socket] Got: userStaffId=${userStaffId}, userId=${user.userId}`);
+        }
       } else {
-        console.error(`[Socket] ❌ join:staff REJECTED - role mismatch or staffId mismatch`);
-        console.error(`[Socket] Expected: role=staff, staffId=${staffId}`);
-        console.error(`[Socket] Got: role=${user.role}, staffId=${user.staffId}`);
+        console.error(`[Socket] ❌ join:staff REJECTED - not a staff user`);
+        console.error(`[Socket] User role: ${user.role}`);
       }
     });
 
@@ -137,16 +156,29 @@ export function setupSocketHandlers(
           if (sess.sdp_answer) {
             console.log(`[Socket] Sending stored answer to newly joined socket for call ${callId}`);
             socket.emit('call:sdp', { callId, type: 'answer', sdp: sess.sdp_answer });
+            socket.emit('webrtc.answer', { callId, sdp: sess.sdp_answer });
           }
           if (sess.sdp_offer && user.role === 'staff') {
             console.log(`[Socket] Sending stored offer to newly joined staff socket for call ${callId}`);
             socket.emit('call:sdp', { callId, type: 'offer', sdp: sess.sdp_offer });
+            socket.emit('webrtc.offer', { callId, sdp: sess.sdp_offer });
           }
         }
       } else {
-        // New repository format
+        // New repository format - send stored SDP from metadata
         socket.emit('call:update', { state: call.status });
-        // TODO: Handle SDP from new repository format if needed
+        if (call.metadata) {
+          if (call.metadata.sdp_offer && user.role === 'staff') {
+            console.log(`[Socket] Sending stored offer from metadata to newly joined staff socket for call ${callId}`);
+            socket.emit('call:sdp', { callId, type: 'offer', sdp: call.metadata.sdp_offer });
+            socket.emit('webrtc.offer', { callId, sdp: call.metadata.sdp_offer });
+          }
+          if (call.metadata.sdp_answer) {
+            console.log(`[Socket] Sending stored answer from metadata to newly joined socket for call ${callId}`);
+            socket.emit('call:sdp', { callId, type: 'answer', sdp: call.metadata.sdp_answer });
+            socket.emit('webrtc.answer', { callId, sdp: call.metadata.sdp_answer });
+          }
+        }
       }
     });
 
@@ -220,65 +252,106 @@ export function setupSocketHandlers(
 
     // SDP exchange - also emit as webrtc.offer/webrtc.answer for new spec
     socket.on('call:sdp', async ({ callId, type, sdp }: { callId: string; type: 'offer' | 'answer'; sdp: any }) => {
+      let callExists = false;
+      
       // Try new repository first
       if (newCallRepo) {
         const call = await newCallRepo.get(callId);
-        if (!call) {
-          console.error(`[Socket] Call ${callId} not found for SDP exchange`);
-          return;
+        if (call) {
+          callExists = true;
+          // Update call metadata with SDP (new repo doesn't store SDP directly, but we can in metadata)
+          try {
+            await newCallRepo.updateStatus(callId, call.status, {
+              metadata: { ...(call.metadata || {}), [`sdp_${type}`]: sdp },
+            });
+          } catch (e) {
+            console.error(`[Socket] Failed to update call metadata with SDP: ${e}`);
+          }
         }
-        // Update call metadata with SDP (new repo doesn't store SDP directly, but we can in metadata)
-        await newCallRepo.updateStatus(callId, call.status, {
-          metadata: { ...call.metadata, [`sdp_${type}`]: sdp },
-        });
-      } else {
-        // Fallback to old repository
+      }
+      
+      // Fallback to old repository if new one doesn't have the call
+      if (!callExists) {
         const sess = await oldCallRepo.get(callId);
-        if (!sess) {
-          console.error(`[Socket] Call ${callId} not found for SDP exchange`);
-          return;
+        if (sess) {
+          callExists = true;
+          if (type === 'offer') sess.sdp_offer = sdp;
+          else sess.sdp_answer = sdp;
+          sess.updated_at = Date.now();
+          
+          try {
+            await oldCallRepo.update(sess);
+          } catch (e) {
+            console.error(`[Socket] Failed to update old call repo with SDP: ${e}`);
+          }
         }
-        
-        if (type === 'offer') sess.sdp_offer = sdp;
-        else sess.sdp_answer = sdp;
-        sess.updated_at = Date.now();
-        
-        await oldCallRepo.update(sess);
+      }
+      
+      if (!callExists) {
+        console.error(`[Socket] Call ${callId} not found in any repository for SDP exchange - will still attempt to broadcast`);
+        // Don't return - still try to broadcast in case sockets are in the room
       }
       
       console.log(`[Socket] Broadcasting ${type} for call ${callId} to room ${rooms.call(callId)}`);
+      
+      // Get all sockets in the call room
+      const roomSockets = await nsp.in(rooms.call(callId)).fetchSockets();
+      console.log(`[Socket] Room ${rooms.call(callId)} has ${roomSockets.length} socket(s)`);
+      
       // Emit both old and new event names for compatibility
+      // Use nsp.to() to broadcast to room (excludes sender)
       nsp.to(rooms.call(callId)).emit('call:sdp', { callId, type, sdp });
       nsp.to(rooms.call(callId)).emit(`webrtc.${type}`, { callId, sdp });
       
-      // Also send directly to the socket that didn't send it (for immediate delivery)
-      const roomSockets = await nsp.in(rooms.call(callId)).fetchSockets();
-      console.log(`[Socket] Room ${rooms.call(callId)} has ${roomSockets.length} socket(s)`);
+      // Also send directly to each socket in the room (excluding sender) for immediate delivery
       roomSockets.forEach(s => {
         if (s.id !== socket.id) {
+          console.log(`[Socket] Sending ${type} directly to socket ${s.id}`);
           s.emit('call:sdp', { callId, type, sdp });
           s.emit(`webrtc.${type}`, { callId, sdp });
         }
       });
+      
+      // If no one is in the room yet, the SDP is stored in metadata and will be sent when they join
     });
 
     // ICE candidate exchange - also emit as webrtc.ice for new spec
     socket.on('call:ice', async ({ callId, candidate }: { callId: string; candidate: any }) => {
-      // Verify call exists
+      // Verify call exists (but don't block if it doesn't - ICE can be sent before call is fully established)
       let callExists = false;
       if (newCallRepo) {
         const call = await newCallRepo.get(callId);
         callExists = !!call;
-      } else {
+      }
+      if (!callExists) {
         const sess = await oldCallRepo.get(callId);
         callExists = !!sess;
       }
       
-      if (!callExists) return;
+      if (!callExists) {
+        console.warn(`[Socket] Call ${callId} not found for ICE candidate exchange - will still attempt to broadcast`);
+        // Don't return - still try to broadcast in case sockets are in the room
+      }
+      
+      console.log(`[Socket] Broadcasting ICE candidate for call ${callId} to room ${rooms.call(callId)}`);
+      
+      // Get all sockets in the call room
+      const roomSockets = await nsp.in(rooms.call(callId)).fetchSockets();
+      console.log(`[Socket] Room ${rooms.call(callId)} has ${roomSockets.length} socket(s) for ICE`);
       
       // Broadcast to all participants in the call room (both old and new event names)
-      socket.to(rooms.call(callId)).emit('call:ice', { callId, candidate });
-      socket.to(rooms.call(callId)).emit('webrtc.ice', { callId, candidate });
+      // Use nsp.to() to broadcast to room (excludes sender)
+      nsp.to(rooms.call(callId)).emit('call:ice', { callId, candidate });
+      nsp.to(rooms.call(callId)).emit('webrtc.ice', { callId, candidate });
+      
+      // Also send directly to each socket in the room (excluding sender) for immediate delivery
+      roomSockets.forEach(s => {
+        if (s.id !== socket.id) {
+          console.log(`[Socket] Sending ICE candidate directly to socket ${s.id}`);
+          s.emit('call:ice', { callId, candidate });
+          s.emit('webrtc.ice', { callId, candidate });
+        }
+      });
     });
 
     // Notification handlers
