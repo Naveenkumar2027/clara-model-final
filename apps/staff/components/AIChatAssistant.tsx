@@ -25,12 +25,20 @@ interface Transcription {
     assistant: string;
 }
 
+const QUICK_COMMANDS = [
+    'Mark me busy today at 2:10 pm',
+    'Set me free tomorrow at 9 am',
+    'Mark me busy on Friday at 3 pm',
+];
+
 const AIChatAssistant: React.FC = () => {
     const [isListening, setIsListening] = useState(false);
     const [status, setStatus] = useState('Idle. Press start to talk.');
     const [transcriptions, setTranscriptions] = useState<Transcription[]>([]);
     const [user, setUser] = useState<StaffProfile | null>(null);
     const [selectedSemester, setSelectedSemester] = useState<string>("5th Semester");
+    const [manualInput, setManualInput] = useState('');
+    const [isProcessingCommand, setIsProcessingCommand] = useState(false);
     
     const sessionPromiseRef = useRef<Promise<LiveSession> | null>(null);
     const inputAudioContextRef = useRef<AudioContext | null>(null);
@@ -88,6 +96,42 @@ const AIChatAssistant: React.FC = () => {
             window.removeEventListener('semester:changed', handleCustomSemesterChange);
         };
     }, []);
+
+    const formatTimeValue = useCallback((time: string): { label: string; hour: number } => {
+        const [hourString, minuteString] = time.split(':');
+        let hour = parseInt(hourString, 10);
+        const minute = parseInt(minuteString, 10);
+        let period: 'AM' | 'PM' = 'AM';
+
+        if (hour === 12) {
+            period = 'PM';
+        } else if (hour >= 1 && hour <= 4) {
+            period = 'PM';
+        } else if (hour >= 8 && hour <= 11) {
+            period = 'AM';
+        }
+
+        const displayHour = hour > 12 ? hour - 12 : hour === 0 ? 12 : hour;
+        const label = `${displayHour}:${minuteString} ${period}`;
+        return { label, hour };
+    }, []);
+
+    const formatTimeSlotLabel = useCallback((slot: string): string => {
+        if (!slot) return '';
+        const [start, end] = slot.split('-');
+        const startLabel = formatTimeValue(start);
+        const endLabel = formatTimeValue(end);
+        return `${startLabel.label} – ${endLabel.label}`;
+    }, [formatTimeValue]);
+
+    const buildAssistantConfirmation = useCallback((command: TimetableUpdateCommand): string => {
+        const slotLabel = command.timeSlot ? formatTimeSlotLabel(command.timeSlot) : '';
+        const actionLabel = command.action === 'mark_busy' ? 'marked you as Busy' : 'cleared that slot';
+        const dayLabel = command.day ? `on ${command.day}` : 'for the requested time';
+        return slotLabel
+            ? `Done! I have ${actionLabel} ${dayLabel} for ${slotLabel}.`
+            : `Done! I have ${actionLabel} ${dayLabel}.`;
+    }, [formatTimeSlotLabel]);
 
     // Handle timetable updates
     const handleTimetableUpdate = useCallback(async (command: TimetableUpdateCommand, userProfile: StaffProfile, semester: string) => {
@@ -287,6 +331,104 @@ const AIChatAssistant: React.FC = () => {
             }
         }
     }, [selectedSemester]);
+
+    const processTimetableCommand = useCallback(
+        async (
+            rawInput: string,
+            assistantOutput = '',
+            source: 'voice' | 'text' = 'voice'
+        ): Promise<{ handled: boolean; assistantMessage?: string; error?: unknown }> => {
+            const input = rawInput.trim();
+            if (!input) {
+                return { handled: false };
+            }
+
+            if (!user) {
+                setStatus('Please log in to manage your timetable.');
+                return { handled: false };
+            }
+
+            const command = parseTimetableCommand(input);
+
+            if (command.action === 'query') {
+                const reply =
+                    assistantOutput ||
+                    "I'm ready to help. You can say things like “mark me busy today at 2:10 pm” or “clear my 9 am slot tomorrow.”";
+                setTranscriptions((prev) => [
+                    ...prev,
+                    {
+                        id: Date.now(),
+                        user: input,
+                        assistant: reply,
+                    },
+                ]);
+                setStatus('Awaiting your timetable commands.');
+                return { handled: false, assistantMessage: reply };
+            }
+
+            if (command.error || !command.day || !command.timeSlot) {
+                const errorMessage =
+                    command.error || 'Please mention both the day and the time you want to change.';
+                const reply =
+                    assistantOutput ||
+                    `I couldn't understand that. ${errorMessage} Try saying “mark me busy today at 2:10 pm.”`;
+
+                setTranscriptions((prev) => [
+                    ...prev,
+                    {
+                        id: Date.now(),
+                        user: input,
+                        assistant: reply,
+                    },
+                ]);
+                setStatus(`Error: ${errorMessage}`);
+                return { handled: false, assistantMessage: reply, error: new Error(errorMessage) };
+            }
+
+            if (source === 'text') {
+                setIsProcessingCommand(true);
+            }
+
+            try {
+                setStatus(`Updating ${command.day} at ${formatTimeSlotLabel(command.timeSlot)}...`);
+                await handleTimetableUpdate(command, user, selectedSemester);
+                const reply = assistantOutput || buildAssistantConfirmation(command);
+
+                setTranscriptions((prev) => [
+                    ...prev,
+                    {
+                        id: Date.now(),
+                        user: input,
+                        assistant: reply,
+                    },
+                ]);
+                setStatus(`Timetable updated for ${command.day} at ${formatTimeSlotLabel(command.timeSlot)}.`);
+                return { handled: true, assistantMessage: reply };
+            } catch (error) {
+                const message =
+                    error instanceof Error ? error.message : 'Unable to update timetable right now.';
+                const reply =
+                    assistantOutput ||
+                    `I tried to update it but ran into a problem: ${message}. Please try again.`;
+
+                setTranscriptions((prev) => [
+                    ...prev,
+                    {
+                        id: Date.now(),
+                        user: input,
+                        assistant: reply,
+                    },
+                ]);
+                setStatus(`Error updating timetable: ${message}`);
+                return { handled: false, assistantMessage: reply, error };
+            } finally {
+                if (source === 'text') {
+                    setIsProcessingCommand(false);
+                }
+            }
+        },
+        [user, handleTimetableUpdate, selectedSemester, buildAssistantConfirmation, formatTimeSlotLabel]
+    );
     
     const stopConversation = useCallback(() => {
         if (isListening || isListeningRef.current) {
@@ -454,47 +596,9 @@ const AIChatAssistant: React.FC = () => {
                         };
                         
                         // Only process meaningful inputs
-                        if (fullUserInput && isValidInput(fullUserInput) && user) {
+                        if (fullUserInput && isValidInput(fullUserInput)) {
                             console.log('Processing user input for timetable update:', fullUserInput);
-                            const command = parseTimetableCommand(fullUserInput);
-                            console.log('Parsed command:', command);
-                            
-                            // Only update timetable if command is valid and actionable
-                            if (command.action !== 'query') {
-                                if (command.error) {
-                                    console.error('❌ Command parsing error:', command.error);
-                                    setStatus(`Error: ${command.error}. Please specify day and time clearly (e.g., "mark me busy at 3pm today").`);
-                                    // Don't add to transcriptions if there's an error
-                                } else if (command.day && command.timeSlot) {
-                                    console.log('✅ Valid command detected, updating timetable:', command);
-                                    // Update timetable (use current selectedSemester state)
-                                    try {
-                                        await handleTimetableUpdate(command, user, selectedSemester);
-                                        console.log('✅ Timetable update completed successfully');
-                                        // Only add to transcriptions if it was a valid command
-                                        if (fullAssistantOutput || fullUserInput) {
-                                            setTranscriptions(prev => [...prev, {id: Date.now(), user: fullUserInput, assistant: fullAssistantOutput}]);
-                                        }
-                                    } catch (updateError) {
-                                        console.error('❌ Error during timetable update:', updateError);
-                                        setStatus(`Error updating timetable: ${updateError instanceof Error ? updateError.message : 'Unknown error'}`);
-                                    }
-                                } else {
-                                    console.warn('⚠️ Command missing required fields:', { 
-                                        action: command.action,
-                                        day: command.day, 
-                                        timeSlot: command.timeSlot,
-                                        error: command.error 
-                                    });
-                                    setStatus(`Could not parse command. Missing: ${!command.day ? 'day' : ''} ${!command.timeSlot ? 'time' : ''}. Please try: "mark me busy at 3pm today"`);
-                                    // Don't add to transcriptions if command is incomplete
-                                }
-                            } else {
-                                // For queries, only add to transcriptions if there's meaningful content
-                                if (fullUserInput.length >= 5 && (fullAssistantOutput || fullUserInput)) {
-                                    setTranscriptions(prev => [...prev, {id: Date.now(), user: fullUserInput, assistant: fullAssistantOutput}]);
-                                }
-                            }
+                            await processTimetableCommand(fullUserInput, fullAssistantOutput, 'voice');
                         } else if (fullUserInput && !isValidInput(fullUserInput)) {
                             // Log filtered inputs for debugging but don't process them
                             console.debug('Filtered out noise/invalid input:', fullUserInput);
@@ -592,6 +696,22 @@ const AIChatAssistant: React.FC = () => {
         }
     }, [isListening, stopConversation, user, selectedSemester, handleTimetableUpdate]);
 
+    const handleManualSubmit = useCallback(
+        async (event: React.FormEvent<HTMLFormElement>) => {
+            event.preventDefault();
+            const input = manualInput.trim();
+            if (!input) {
+                return;
+            }
+
+            const result = await processTimetableCommand(input, '', 'text');
+            if (result.handled) {
+                setManualInput('');
+            }
+        },
+        [manualInput, processTimetableCommand]
+    );
+
     useEffect(() => {
         return () => {
             stopConversation();
@@ -620,7 +740,39 @@ const AIChatAssistant: React.FC = () => {
                 ))}
             </div>
             <div className="flex-shrink-0 flex flex-col items-center space-y-4">
-                <p className="text-sm text-slate-400 h-5">{status}</p>
+                <div className="w-full max-w-xl mx-auto space-y-2">
+                    <form onSubmit={handleManualSubmit} className="flex flex-col sm:flex-row gap-2">
+                        <input
+                            type="text"
+                            value={manualInput}
+                            onChange={(event) => setManualInput(event.target.value)}
+                            placeholder='Try saying or typing: "Mark me busy today at 2:10 pm"'
+                            className="flex-1 bg-slate-800/70 border border-slate-700 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+                            disabled={isProcessingCommand}
+                        />
+                        <button
+                            type="submit"
+                            disabled={isProcessingCommand}
+                            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-3 rounded-lg font-semibold transition-colors"
+                        >
+                            {isProcessingCommand ? 'Working...' : 'Send'}
+                        </button>
+                    </form>
+                    <div className="flex flex-wrap gap-2 text-xs text-slate-400">
+                        <span className="whitespace-nowrap">Quick commands:</span>
+                        {QUICK_COMMANDS.map((command) => (
+                            <button
+                                key={command}
+                                type="button"
+                                onClick={() => setManualInput(command)}
+                                className="px-3 py-1 rounded-full bg-slate-800/70 border border-slate-700 hover:bg-slate-700/70 transition-colors"
+                            >
+                                {command}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                <p className="text-sm text-slate-400 h-5 text-center">{status}</p>
                 <button
                     onClick={isListening ? stopConversation : startConversation}
                     className={`w-20 h-20 rounded-full flex items-center justify-center text-white transition-all duration-300 ease-in-out focus:outline-none focus:ring-4 focus:ring-offset-2 focus:ring-offset-slate-900 ${isListening ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500' : 'bg-green-600 hover:bg-green-700 focus:ring-green-500'}`}
