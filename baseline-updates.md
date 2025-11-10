@@ -1,6 +1,6 @@
 # Baseline Updates (`baseline-updates`)
 
-Commit reference: `ddb1817` — *docs: add baseline revert instructions*
+Commit reference: `12a29cf` — *chore: set new baseline after upstream sync*
 
 This document captures the state that should be restored whenever a **revert** is requested.
 
@@ -36,7 +36,7 @@ To restore this baseline:
 ```bash
 git reset --hard baseline-updates
 # or
-git reset --hard ddb1817
+git reset --hard 12a29cf
 ```
 
 This resets the repository to the fully updated state described above.
