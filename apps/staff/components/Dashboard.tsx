@@ -479,7 +479,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
             username: user.email,
             role: 'staff',
             staffId: user.id,
-            dept: user.department || 'general',
+            dept: user.department || 'Staff',
           }),
         })
           .then((res) => res.json())

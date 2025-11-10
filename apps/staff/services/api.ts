@@ -127,7 +127,7 @@ class ApiService {
   }
 
   async login(email: string, password: string) {
-    return this.request<{ token: string; refreshToken: string; user: any }>(
+    return this.request<{ token: string; refreshToken: string; user: any; metadata?: any }>(
       '/auth/login',
       {
         method: 'POST',
@@ -152,13 +152,26 @@ class ApiService {
     );
   }
 
-  async changePassword(oldPassword: string, newPassword: string, confirmPassword: string) {
-    return this.request<{ message: string }>('/auth/change-password', {
+  async updatePassword(currentPassword: string, newPassword: string, confirmPassword: string) {
+    return this.request<{ message: string; requireReauth?: boolean }>('/auth/update-password', {
       method: 'PATCH',
-      body: JSON.stringify({ oldPassword, newPassword, confirmPassword }),
+      body: JSON.stringify({ currentPassword, newPassword, confirmNewPassword: confirmPassword }),
     });
   }
 
+  async requestPasswordReset(email: string) {
+    return this.request<{ message: string }>('/auth/request-reset', {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(email: string, token: string, newPassword: string, confirmPassword: string) {
+    return this.request<{ message: string }>('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify({ email, token, newPassword, confirmPassword }),
+    });
+  }
   async createNotification(userIds: string[], type: string, title: string, message: string, groupId?: string, senderId?: string) {
     return this.request<{ message: string; count: number }>('/notifications', {
       method: 'POST',
@@ -194,4 +207,7 @@ class ApiService {
 }
 
 export const apiService = new ApiService();
+
+
+
 

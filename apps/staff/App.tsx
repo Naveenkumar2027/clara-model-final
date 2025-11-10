@@ -7,6 +7,7 @@ import UserDashboard from './components/UserDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 import Settings from './components/Settings';
 import Dashboard from './components/Dashboard';
+import ResetPassword from './components/ResetPassword';
 
 const App: React.FC = () => {
   return (
@@ -14,30 +15,31 @@ const App: React.FC = () => {
       <NotificationProvider>
         <BrowserRouter>
           <Routes>
-            {/* Home/Login route */}
+            {/* Public routes */}
             <Route path="/" element={<Home />} />
             <Route path="/login" element={<Home />} />
-            
+            <Route path="/reset-password" element={<ResetPassword />} />
+
             {/* Protected user dashboard route */}
-            <Route 
-              path="/:username" 
+            <Route
+              path="/:username"
               element={
                 <ProtectedRoute>
                   <UserDashboard />
                 </ProtectedRoute>
-              } 
+              }
             />
-            
+
             {/* Protected settings route */}
-            <Route 
-              path="/:username/settings" 
+            <Route
+              path="/:username/settings"
               element={
                 <ProtectedRoute>
                   <SettingsRouteWrapper />
                 </ProtectedRoute>
-              } 
+              }
             />
-            
+
             {/* Catch all - redirect to home */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
@@ -71,8 +73,8 @@ const SettingsRouteWrapper: React.FC = () => {
   }
 
   return (
-    <Dashboard 
-      user={user} 
+    <Dashboard
+      user={user}
       initialView="Settings"
       onLogout={() => {
         localStorage.removeItem('token');

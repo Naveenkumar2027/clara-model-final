@@ -1,87 +1,147 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
 import { apiService } from '../services/api';
 import { useNotification } from './NotificationProvider';
 
+const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{8,}$/;
+const POLICY_MESSAGE = 'Password must be 8+ characters with uppercase, lowercase, number, and special character.';
+
+const STRENGTH_CONFIG = {
+  Weak: { percent: 33, gradient: 'from-red-500 to-rose-500', text: 'text-red-400' },
+  Moderate: { percent: 66, gradient: 'from-yellow-400 to-orange-500', text: 'text-amber-400' },
+  Strong: { percent: 100, gradient: 'from-green-500 to-emerald-500', text: 'text-emerald-400' },
+} as const;
+
+type StrengthLabel = keyof typeof STRENGTH_CONFIG;
+
+const evaluateStrength = (password: string): StrengthLabel => {
+  let score = 0;
+  if (password.length >= 8) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[a-z]/.test(password)) score++;
+  if (/\d/.test(password)) score++;
+  if (/[!@#$%^&*]/.test(password)) score++;
+
+  if (score <= 2) return 'Weak';
+  if (score <= 4) return 'Moderate';
+  return 'Strong';
+};
+
 const Settings: React.FC = () => {
-  const [oldPassword, setOldPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [strength, setStrength] = useState<StrengthLabel>('Weak');
+  const [validationMessage, setValidationMessage] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const { addNotification } = useNotification();
 
-  const validatePassword = (password: string): string | null => {
-    if (password.length < 8) {
-      return 'Password must be at least 8 characters long';
-    }
-    if (!/[0-9]/.test(password)) {
-      return 'Password must contain at least one number';
-    }
-    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(password)) {
-      return 'Password must contain at least one symbol';
-    }
-    return null;
-  };
+  const strengthConfig = useMemo(() => STRENGTH_CONFIG[strength], [strength]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrors({});
-
-    // Validation
-    const newPasswordError = validatePassword(newPassword);
-    if (newPasswordError) {
-      setErrors({ newPassword: newPasswordError });
+  const handleNewPasswordChange = (value: string) => {
+    setNewPassword(value);
+    setErrors((prev) => ({ ...prev, newPassword: '', submit: '' }));
+    if (!value) {
+      setValidationMessage('');
+      setStrength('Weak');
       return;
     }
 
+    const newStrength = evaluateStrength(value);
+    setStrength(newStrength);
+
+    if (!passwordRegex.test(value)) {
+      setValidationMessage(POLICY_MESSAGE);
+    } else {
+      setValidationMessage('');
+    }
+  };
+
+  const handleConfirmPasswordChange = (value: string) => {
+    setConfirmPassword(value);
+    setErrors((prev) => ({ ...prev, confirmPassword: '', submit: '' }));
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const nextErrors: Record<string, string> = {};
+
+    if (!passwordRegex.test(newPassword)) {
+      nextErrors.newPassword = POLICY_MESSAGE;
+    }
+
     if (newPassword !== confirmPassword) {
-      setErrors({ confirmPassword: 'Passwords do not match' });
+      nextErrors.confirmPassword = 'Passwords do not match';
+    }
+
+    if (!currentPassword) {
+      nextErrors.currentPassword = 'Current password is required';
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setErrors(nextErrors);
       return;
     }
 
     setLoading(true);
+    setErrors({});
+
     try {
-      const response = await apiService.changePassword(oldPassword, newPassword, confirmPassword);
-      
+      const response = await apiService.updatePassword(currentPassword, newPassword, confirmPassword);
+
       if (response.data) {
         addNotification({
           type: 'system',
-          title: 'Success',
-          message: 'Password updated successfully'
+          title: 'Password Updated',
+          message: 'Your password was updated successfully. Please sign in again.',
         });
-        setOldPassword('');
+
+        setCurrentPassword('');
         setNewPassword('');
         setConfirmPassword('');
-      } else {
-        setErrors({ submit: response.error || 'Failed to change password' });
+        setStrength('Weak');
+        setValidationMessage('');
+
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        localStorage.removeItem('user');
+
+        setTimeout(() => {
+          window.location.href = '/login';
+        }, 1200);
+        return;
       }
+
+      setErrors({ submit: response.error || 'Failed to update password' });
     } catch (error) {
-      console.error('Error changing password:', error);
-      setErrors({ submit: 'An error occurred. Please try again.' });
+      console.error('Error updating password:', error);
+      setErrors({ submit: 'An unexpected error occurred. Please try again.' });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="text-white p-4 lg:p-6 rounded-2xl bg-slate-900/50 backdrop-blur-lg border border-white/10 max-w-2xl mx-auto w-full">
-      <h2 className="text-2xl font-bold mb-6">Change Password</h2>
-      
+    <div className="text-white p-4 lg:p-6 rounded-2xl bg-slate-900/50 backdrop-blur-lg border border-white/10 max-w-2xl mx-auto w-full shadow-xl">
+      <h2 className="text-2xl font-bold mb-6">Set / Change Password</h2>
+
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="oldPassword">
+          <label className="block text-sm font-medium text-slate-300 mb-2" htmlFor="currentPassword">
             Current Password
           </label>
           <input
-            id="oldPassword"
+            id="currentPassword"
             type="password"
-            value={oldPassword}
-            onChange={(e) => setOldPassword(e.target.value)}
+            value={currentPassword}
+            onChange={(event) => setCurrentPassword(event.target.value)}
             className="w-full bg-slate-800/80 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+            autoComplete="current-password"
             required
           />
-          {errors.oldPassword && (
-            <p className="text-red-400 text-sm mt-1">{errors.oldPassword}</p>
+          {errors.currentPassword && (
+            <p className="text-red-400 text-sm mt-1">{errors.currentPassword}</p>
           )}
         </div>
 
@@ -93,16 +153,29 @@ const Settings: React.FC = () => {
             id="newPassword"
             type="password"
             value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
+            onChange={(event) => handleNewPasswordChange(event.target.value)}
             className="w-full bg-slate-800/80 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+            autoComplete="new-password"
             required
           />
+          <div className="mt-3">
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+              <span className="uppercase tracking-wide">Strength: <span className={`font-semibold ${strengthConfig.text}`}>{strength}</span></span>
+              <span>{validationMessage || POLICY_MESSAGE}</span>
+            </div>
+            <div className="h-2 w-full bg-slate-800/80 rounded-full overflow-hidden">
+              <motion.div
+                key={strength}
+                initial={{ width: 0 }}
+                animate={{ width: `${strengthConfig.percent}%` }}
+                transition={{ duration: 0.35, ease: 'easeOut' }}
+                className={`h-full bg-gradient-to-r ${strengthConfig.gradient}`}
+              />
+            </div>
+          </div>
           {errors.newPassword && (
             <p className="text-red-400 text-sm mt-1">{errors.newPassword}</p>
           )}
-          <p className="text-slate-400 text-xs mt-1">
-            Must be at least 8 characters with one number and one symbol
-          </p>
         </div>
 
         <div>
@@ -113,8 +186,9 @@ const Settings: React.FC = () => {
             id="confirmPassword"
             type="password"
             value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
+            onChange={(event) => handleConfirmPasswordChange(event.target.value)}
             className="w-full bg-slate-800/80 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+            autoComplete="new-password"
             required
           />
           {errors.confirmPassword && (
@@ -123,7 +197,7 @@ const Settings: React.FC = () => {
         </div>
 
         {errors.submit && (
-          <div className="bg-red-500/20 border border-red-500/50 text-red-400 px-4 py-3 rounded-lg">
+          <div className="bg-red-500/20 border border-red-500/50 text-red-300 px-4 py-3 rounded-lg">
             {errors.submit}
           </div>
         )}
@@ -141,4 +215,3 @@ const Settings: React.FC = () => {
 };
 
 export default Settings;
-
