@@ -1,0 +1,39 @@
+services:
+  # Web Service
+  - type: web
+    name: clara-web-service
+    runtime: docker
+    dockerfilePath: ./apps/server/Dockerfile
+    dockerContext: .
+    dockerCommand: node apps/server/dist/index.js
+    plan: starter
+    region: oregon
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: ENABLE_UNIFIED_MODE
+        value: "true"
+      - key: PORT
+        value: "10000"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: clara-database
+          property: connectionString
+      - key: CORS_ORIGINS
+        value: https://clara-web-service.onrender.com
+      - key: FEATURE_SCHEDULE_V1
+        value: "true"
+      - key: SOCKET_PATH
+        value: /socket
+    healthCheckPath: /healthz
+
+databases:
+  # PostgreSQL Database
+  - name: clara-database
+    databaseName: clara
+    user: clara
+    plan: starter
+    region: oregon
+
