@@ -446,7 +446,8 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
 
       const ensureAvailability = async (tokenValue: string) => {
         try {
-          await fetch(`${apiBase}/api/v1/staff/availability`, {
+          // Try new staff availability endpoint first
+          const response = await fetch(`${apiBase}/api/v1/staff/availability`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -454,9 +455,17 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, initialView = 'Da
             },
             body: JSON.stringify({ status: 'available', orgId: 'default' }),
           });
-          console.log('[Dashboard] Staff availability set to available');
+          
+          if (response.ok) {
+            console.log('[Dashboard] Staff availability set to available');
+          } else {
+            // Silently fail - this is not critical for the app to function
+            console.warn('[Dashboard] Staff availability endpoint returned:', response.status);
+          }
         } catch (error) {
-          console.error('[Dashboard] Failed to set staff availability:', error);
+          // Silently fail - this is not critical for the app to function
+          // The old availability endpoint may not be available, which is fine
+          console.warn('[Dashboard] Staff availability endpoint not available (non-critical):', error);
         }
       };
 

@@ -38,9 +38,15 @@ def login_staff(email: str = STAFF_EMAIL, password: str = STAFF_PASSWORD, retry_
         "password": password
     }
     
+    # Add test mode header to bypass rate limiting
+    headers = {
+        "Content-Type": "application/json",
+        "x-test-mode": "true"
+    }
+    
     max_retries = 3
     for attempt in range(max_retries):
-        response = requests.post(url, json=payload, timeout=TIMEOUT)
+        response = requests.post(url, json=payload, headers=headers, timeout=TIMEOUT)
         if response.status_code == 429:
             if attempt < max_retries - 1:
                 wait_time = retry_delay * (attempt + 1)
@@ -78,9 +84,15 @@ def login_client(client_id: str = CLIENT_ID, retry_delay: float = 2.0) -> str:
         "role": "client"
     }
     
+    # Add test mode header to bypass rate limiting
+    headers = {
+        "Content-Type": "application/json",
+        "x-test-mode": "true"
+    }
+    
     max_retries = 3
     for attempt in range(max_retries):
-        response = requests.post(url, json=payload, timeout=TIMEOUT)
+        response = requests.post(url, json=payload, headers=headers, timeout=TIMEOUT)
         if response.status_code == 429:
             if attempt < max_retries - 1:
                 wait_time = retry_delay * (attempt + 1)

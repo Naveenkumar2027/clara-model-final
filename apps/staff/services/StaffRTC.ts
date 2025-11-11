@@ -41,6 +41,8 @@ export class StaffRTC {
   private apiBase: string;
   private token: string;
   private staffId: string;
+  private joinTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectingWithToken = false;
   private activeCalls: Map<string, { pc: RTCPeerConnection; stream: MediaStream }> = new Map();
 
   constructor({ apiBase = API_BASE, token, staffId }: { apiBase?: string; token: string; staffId: string }) {
@@ -72,10 +74,19 @@ export class StaffRTC {
       this.socket = io(`${socketUrl}/rtc`, {
         path: SOCKET_PATH,
         auth: { token: this.token },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 500,
       });
 
       // Join staff room
       this.socket.on('connect', () => {
+        this.reconnectingWithToken = false;
+        if (this.joinTimer) {
+          clearTimeout(this.joinTimer);
+          this.joinTimer = null;
+        }
         console.log('[StaffRTC] ===== SOCKET CONNECTED =====');
         console.log('[StaffRTC] Staff socket connected to /rtc namespace');
         console.log('[StaffRTC] Staff ID:', this.staffId);
@@ -83,7 +94,8 @@ export class StaffRTC {
         console.log('[StaffRTC] Socket connected:', this.socket.connected);
         
         // Wait a bit to ensure socket is fully ready
-        setTimeout(() => {
+        this.joinTimer = setTimeout(() => {
+          this.joinTimer = null;
           // Explicitly join the staff room (server should also do this, but this ensures it)
           console.log('[StaffRTC] Emitting join:staff event for staffId:', this.staffId);
           this.socket.emit('join:staff', { staffId: this.staffId });
@@ -91,8 +103,37 @@ export class StaffRTC {
         }, 100);
       });
 
+      this.socket.on('disconnect', () => {
+        if (this.joinTimer) {
+          clearTimeout(this.joinTimer);
+          this.joinTimer = null;
+        }
+      });
+
       this.socket.on('connect_error', (error) => {
         console.error('Staff socket connection error:', error);
+        // If unauthorized, try to pick up a refreshed token and reconnect once
+        const msg = (error as any)?.message || '';
+        if (!this.reconnectingWithToken && (msg.includes('unauthorized') || msg.includes('missing token'))) {
+          this.reconnectingWithToken = true;
+          const refreshed =
+            localStorage.getItem('token') ||
+            localStorage.getItem('clara-jwt-token') ||
+            this.token;
+          if (refreshed && refreshed !== this.token) {
+            console.log('[StaffRTC] Detected updated token, retrying socket connection...');
+            this.token = refreshed;
+            try {
+              this.socket?.disconnect();
+            } catch {}
+            this.socket = null;
+            this.ensureSocket();
+          } else {
+            this.reconnectingWithToken = false;
+          }
+        } else {
+          this.reconnectingWithToken = false;
+        }
       });
     }
     return this.socket;

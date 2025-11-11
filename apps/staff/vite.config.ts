@@ -23,7 +23,11 @@ export default defineConfig(({ mode }) => {
         'process.env.API_KEY': JSON.stringify(resolvedApiKey),
         'process.env.GEMINI_API_KEY': JSON.stringify(resolvedApiKey),
         'import.meta.env.VITE_API_KEY': JSON.stringify(resolvedApiKey),
-        'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(resolvedApiKey)
+        'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(resolvedApiKey),
+        // Schedule feature flag (defaults to true if not set)
+        'import.meta.env.VITE_FEATURE_SCHEDULE_V1': JSON.stringify(env.VITE_FEATURE_SCHEDULE_V1 !== 'false'),
+        // API base URL
+        'import.meta.env.VITE_API_BASE': JSON.stringify(env.VITE_API_BASE || `http://localhost:${env.SERVER_PORT || 8080}`)
       },
       resolve: {
         alias: {

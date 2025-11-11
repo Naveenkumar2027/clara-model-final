@@ -1,0 +1,1462 @@
+[
+  {
+    "faculty_name": "Ms. Lakshmi Durga N",
+    "email": "lakshmidurgan@gmail.com",
+    "route": "/ldn",
+    "short_name": "ldn",
+    "designation": "Assistant Professor",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 8,
+      "lab_hours": 8,
+      "total_units": 16
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BCD501",
+        "subject_name": "Software Engineering & Project Management"
+      },
+      {
+        "subject_code": "BCDL504",
+        "subject_name": "Data Visualization Lab"
+      },
+      {
+        "subject_code": "BCS302",
+        "subject_name": "Digital Design And Computer Organization Lab"
+      },
+      {
+        "subject_code": "BCS358C",
+        "subject_name": "Project Management With Git"
+      },
+      {
+        "subject_code": "BAD702",
+        "subject_name": "Statistical Machine Learning for Data Science Lab"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD501",
+            "subject_name": "Software Engineering & Project Management",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCD501",
+            "subject_name": "Software Engineering & Project Management",
+            "class_details": "5th B"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BCD501",
+            "subject_name": "Software Engineering & Project Management",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCD501",
+            "subject_name": "Software Engineering & Project Management",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD501",
+            "subject_name": "Software Engineering & Project Management",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science Lab",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "15:05",
+            "subject_code": "BCS302",
+            "subject_name": "Digital Design And Computer Organization Lab",
+            "class_details": "3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD501",
+            "subject_name": "Software Engineering & Project Management",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BCD501",
+            "subject_name": "Software Engineering & Project Management",
+            "class_details": "5th B"
+          }
+        ]
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BCDL504",
+            "subject_name": "Data Visualization Lab",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BCD501",
+            "subject_name": "Software Engineering & Project Management",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "15:05",
+            "subject_code": "BCS358C",
+            "subject_name": "Project Management With Git",
+            "class_details": "3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": []
+      }
+    ]
+  },
+  {
+    "faculty_name": "Mrs. Anitha C S (ACS)",
+    "email": "anithacs@gmail.com",
+    "route": "/acs",
+    "short_name": "acs",
+    "designation": "Assistant Professor",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 8,
+      "lab_hours": 8,
+      "total_units": 16
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BRMK557",
+        "subject_name": "Research Methodology and IPR"
+      },
+      {
+        "subject_code": "BCD502",
+        "subject_name": "Computer Networks (NS-2/3) Lab"
+      },
+      {
+        "subject_code": "BCDL504",
+        "subject_name": "Data Visualization Lab"
+      },
+      {
+        "subject_code": "BCS302",
+        "subject_name": "Digital Design And Computer Organization Lab"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BRMK557",
+            "subject_name": "Research Methodology and IPR",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BRMK557",
+            "subject_name": "Research Methodology and IPR",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "14:10",
+            "end_time": "16:10",
+            "subject_code": "BCS302",
+            "subject_name": "Digital Design And Computer Organization Lab",
+            "class_details": "3rd A"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BCDL504",
+            "subject_name": "Data Visualization Lab",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3) Lab",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BRMK557",
+            "subject_name": "Research Methodology and IPR",
+            "class_details": "5th B"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BRMK557",
+            "subject_name": "Research Methodology and IPR",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BRMK557",
+            "subject_name": "Research Methodology and IPR",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3) Lab",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BRMK557",
+            "subject_name": "Research Methodology and IPR",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BRMK557",
+            "subject_name": "Research Methodology and IPR",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BRMK557",
+            "subject_name": "Research Methodology and IPR",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": []
+      }
+    ]
+  },
+  {
+    "faculty_name": "Dr. Dhivyasri G",
+    "email": "gdhivyasri@gmail.com",
+    "route": "/gd",
+    "short_name": "gd",
+    "designation": "Associate Professor",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 8,
+      "lab_hours": 6,
+      "total_units": 14
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BCD502",
+        "subject_name": "Computer Networks (NS-2/3)"
+      },
+      {
+        "subject_code": "BCD502",
+        "subject_name": "Computer Networks (NS-2/3) Lab"
+      },
+      {
+        "subject_code": "BCDL504",
+        "subject_name": "Data Visualization Lab"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3)",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3)",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3)",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "16:10",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3) Lab",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3)",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3)",
+            "class_details": "5th B"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3)",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3) Lab",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3)",
+            "class_details": "5th B"
+          }
+        ]
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BCDL504",
+            "subject_name": "Data Visualization Lab",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3)",
+            "class_details": "5th B"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": []
+      }
+    ]
+  },
+  {
+    "faculty_name": "Mrs. Nisha SK",
+    "email": "nishask@gmail.com",
+    "route": "/nsk",
+    "short_name": "nsk",
+    "designation": "Assistant Professor",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 8,
+      "lab_hours": 8,
+      "total_units": 16
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BCD515C",
+        "subject_name": "NOSQL Databases"
+      },
+      {
+        "subject_code": "BCS302",
+        "subject_name": "Digital Design And Computer Organization Lab"
+      },
+      {
+        "subject_code": "BCS303",
+        "subject_name": "Operating Systems Lab"
+      },
+      {
+        "subject_code": "BCDL504",
+        "subject_name": "Data Visualization Lab"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCD515C",
+            "subject_name": "NOSQL Databases",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCD515C",
+            "subject_name": "NOSQL Databases",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "14:10",
+            "end_time": "16:10",
+            "subject_code": "BCS302",
+            "subject_name": "Digital Design And Computer Organization Lab",
+            "class_details": "3rd A"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BCDL504",
+            "subject_name": "Data Visualization Lab",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCD515C",
+            "subject_name": "NOSQL Databases",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "14:10",
+            "end_time": "16:10",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems Lab",
+            "class_details": "3rd A"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BCD515C",
+            "subject_name": "NOSQL Databases",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCD515C",
+            "subject_name": "NOSQL Databases",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": [
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BCD515C",
+            "subject_name": "NOSQL Databases",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "14:10",
+            "end_time": "16:10",
+            "subject_code": "BCS302",
+            "subject_name": "Digital Design And Computer Organization Lab",
+            "class_details": "3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCD515C",
+            "subject_name": "NOSQL Databases",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCD515C",
+            "subject_name": "NOSQL Databases",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": []
+      }
+    ]
+  },
+  {
+    "faculty_name": "Mr. Amarnath B Patil",
+    "email": "amarnathbpatil@gmail.com",
+    "route": "/abp",
+    "short_name": "abp",
+    "designation": "Assistant Professor",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 9,
+      "lab_hours": 12,
+      "total_units": 17
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BCS306A",
+        "subject_name": "Object Oriented Programming With Java"
+      },
+      {
+        "subject_code": "BCS306A",
+        "subject_name": "Object Oriented Programming With Java Lab"
+      },
+      {
+        "subject_code": "BCS358C",
+        "subject_name": "Project Management With Git"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java",
+            "class_details": "3rd A"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java Lab",
+            "class_details": "A2 3rd A"
+          },
+          {
+            "start_time": "14:10",
+            "end_time": "15:05",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java",
+            "class_details": "3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java",
+            "class_details": "3rd A"
+          },
+          {
+            "start_time": "14:10",
+            "end_time": "16:10",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java Lab",
+            "class_details": "B2 3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java",
+            "class_details": "3rd B"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java",
+            "class_details": "3rd B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java",
+            "class_details": "3rd A"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BCS358C",
+            "subject_name": "Project Management With Git",
+            "class_details": "3rd A"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java Lab",
+            "class_details": "B1 3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java",
+            "class_details": "3rd B"
+          },
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java",
+            "class_details": "3rd A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "15:05",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java Lab",
+            "class_details": "A1 3rd A"
+          },
+          {
+            "start_time": "15:05",
+            "end_time": "16:10",
+            "subject_code": "BCS358C",
+            "subject_name": "Project Management With Git",
+            "class_details": "3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": [
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java",
+            "class_details": "3rd B"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "faculty_name": "Dr. Nagashree N",
+    "email": "nagashreen@gmail.com",
+    "route": "/nn",
+    "short_name": "nn",
+    "designation": "Associate Professor & HOD",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 10,
+      "lab_hours": 0,
+      "total_units": 10
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BCD503",
+        "subject_name": "Theory of Computation"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD503",
+            "subject_name": "Theory of Computation",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BCD503",
+            "subject_name": "Theory of Computation",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD503",
+            "subject_name": "Theory of Computation",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCD503",
+            "subject_name": "Theory of Computation",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD503",
+            "subject_name": "Theory of Computation",
+            "class_details": "5th B"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD503",
+            "subject_name": "Theory of Computation",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BCD503",
+            "subject_name": "Theory of Computation",
+            "class_details": "5th A"
+          }
+        ]
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCD503",
+            "subject_name": "Theory of Computation",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCD503",
+            "subject_name": "Theory of Computation",
+            "class_details": "5th B"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": []
+      }
+    ]
+  },
+  {
+    "faculty_name": "Mrs. Jyoti Kumari",
+    "email": "jyotikumari@gmail.com",
+    "route": "/jk",
+    "short_name": "jk",
+    "designation": "Assistant Professor",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 8,
+      "lab_hours": 10,
+      "total_units": 16
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BCS703",
+        "subject_name": "Cryptography & Network Security"
+      },
+      {
+        "subject_code": "BAD702",
+        "subject_name": "Statistical Machine Learning for Data Science Lab"
+      },
+      {
+        "subject_code": "BCSL305",
+        "subject_name": "Data structures laboratory"
+      },
+      {
+        "subject_code": "BDS701",
+        "subject_name": "Parallel Programming Lab"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BCS703",
+            "subject_name": "Cryptography & Network Security",
+            "class_details": "7th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science Lab",
+            "class_details": "7th B"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCS703",
+            "subject_name": "Cryptography & Network Security",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCS703",
+            "subject_name": "Cryptography & Network Security",
+            "class_details": "7th B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCS703",
+            "subject_name": "Cryptography & Network Security",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "14:10",
+            "end_time": "16:10",
+            "subject_code": "BCSL305",
+            "subject_name": "Data structures laboratory",
+            "class_details": "B1 3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming Lab",
+            "class_details": "7th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science Lab",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCS703",
+            "subject_name": "Cryptography & Network Security",
+            "class_details": "7th B"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BCS703",
+            "subject_name": "Cryptography & Network Security",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCS703",
+            "subject_name": "Cryptography & Network Security",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCS703",
+            "subject_name": "Cryptography & Network Security",
+            "class_details": "7th B"
+          }
+        ]
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BCSL305",
+            "subject_name": "Data structures laboratory",
+            "class_details": "B2 3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": [
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": null,
+            "subject_name": "PE",
+            "class_details": null
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "faculty_name": "Mrs. Vidyashree R",
+    "email": "vidyashreer@gmail.com",
+    "route": "/vr",
+    "short_name": "vr",
+    "designation": "Assistant Professor (POP)",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 6,
+      "lab_hours": 11,
+      "total_units": 16
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BAD702",
+        "subject_name": "Statistical Machine Learning for Data Science"
+      },
+      {
+        "subject_code": "BAD702",
+        "subject_name": "Statistical Machine Learning for Data Science Lab"
+      },
+      {
+        "subject_code": "BCDL504",
+        "subject_name": "Data Visualization Lab"
+      },
+      {
+        "subject_code": "BCS306A",
+        "subject_name": "Object Oriented Programming With Java Lab"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science",
+            "class_details": "7th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science Lab",
+            "class_details": "7th B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science",
+            "class_details": "7th A"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BCDL504",
+            "subject_name": "Data Visualization Lab",
+            "class_details": "5th B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science",
+            "class_details": "7th B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "14:10",
+            "end_time": "16:10",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java Lab",
+            "class_details": "B2 3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science Lab",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BAD702",
+            "subject_name": "Statistical Machine Learning for Data Science",
+            "class_details": "7th B"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": []
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BCDL504",
+            "subject_name": "Data Visualization Lab",
+            "class_details": "5th A"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BCS306A",
+            "subject_name": "Object Oriented Programming With Java Lab",
+            "class_details": "B1 3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": []
+      }
+    ]
+  },
+  {
+    "faculty_name": "Dr. Bhavana A",
+    "email": "bhavanaa@gmail.com",
+    "route": "/ba",
+    "short_name": "ba",
+    "designation": "Associate Professor",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 8,
+      "lab_hours": 6,
+      "total_units": 14
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BDS701",
+        "subject_name": "Parallel Programming"
+      },
+      {
+        "subject_code": "BDS701",
+        "subject_name": "Parallel Programming Lab"
+      },
+      {
+        "subject_code": "BCS358C",
+        "subject_name": "Project Management With Git"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming Lab",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming",
+            "class_details": "7th A"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming",
+            "class_details": "7th B"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "14:10",
+            "end_time": "15:05",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming",
+            "class_details": "7th B"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming Lab",
+            "class_details": "7th B"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming",
+            "class_details": "7th B"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming",
+            "class_details": "7th A"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming",
+            "class_details": "7th B"
+          }
+        ]
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "14:10",
+            "end_time": "16:10",
+            "subject_code": "BCS358C",
+            "subject_name": "Project Management With Git",
+            "class_details": "3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": []
+      }
+    ]
+  },
+  {
+    "faculty_name": "Mrs. Bhavya T N",
+    "email": "bhavyatn@gmail.com",
+    "route": "/btn",
+    "short_name": "btn",
+    "designation": "Assistant Professor",
+    "academic_year": "2025-2026",
+    "semester_type": "Odd",
+    "workload": {
+      "theory_hours": 9,
+      "lab_hours": 8,
+      "total_units": 17
+    },
+    "courses_taught": [
+      {
+        "subject_code": "BCS303",
+        "subject_name": "Operating Systems"
+      },
+      {
+        "subject_code": "BCS303",
+        "subject_name": "Operating Systems Lab"
+      },
+      {
+        "subject_code": "BCD502",
+        "subject_name": "Computer Networks (NS-2/3) Lab"
+      },
+      {
+        "subject_code": "BDS701",
+        "subject_name": "Parallel Programming Lab"
+      }
+    ],
+    "timetable": [
+      {
+        "day": "Monday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "10:20",
+            "subject_code": "BDS701",
+            "subject_name": "Parallel Programming Lab",
+            "class_details": "7th A"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "11:35",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems",
+            "class_details": "3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Tuesday",
+        "slots": [
+          {
+            "start_time": "09:25",
+            "end_time": "10:20",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems",
+            "class_details": "3rd B"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems",
+            "class_details": "3rd A"
+          },
+          {
+            "start_time": "15:05",
+            "end_time": "16:10",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems Lab",
+            "class_details": "3rd A"
+          }
+        ]
+      },
+      {
+        "day": "Wednesday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems",
+            "class_details": "3rd A"
+          },
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems",
+            "class_details": "3rd B"
+          },
+          {
+            "start_time": "15:05",
+            "end_time": "16:10",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems Lab",
+            "class_details": "3rd B"
+          }
+        ]
+      },
+      {
+        "day": "Thursday",
+        "slots": [
+          {
+            "start_time": "08:30",
+            "end_time": "09:25",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems",
+            "class_details": "3rd B"
+          },
+          {
+            "start_time": "10:40",
+            "end_time": "12:30",
+            "subject_code": "BCD502",
+            "subject_name": "Computer Networks (NS-2/3) Lab",
+            "class_details": "5th B"
+          }
+        ]
+      },
+      {
+        "day": "Friday",
+        "slots": [
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems",
+            "class_details": "3rd A"
+          },
+          {
+            "start_time": "13:15",
+            "end_time": "14:10",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems",
+            "class_details": "3rd A"
+          }
+        ]
+      },
+      {
+        "day": "Saturday",
+        "slots": [
+          {
+            "start_time": "11:35",
+            "end_time": "12:30",
+            "subject_code": "BCS303",
+            "subject_name": "Operating Systems",
+            "class_details": "3rd A"
+          }
+        ]
+      }
+    ]
+  }
+]
+

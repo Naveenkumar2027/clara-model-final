@@ -521,6 +521,14 @@ const AIChatAssistant: React.FC = () => {
         try {
             inputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             outputAudioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+            
+            // Resume audio contexts if they were suspended (browser autoplay policy)
+            if (inputAudioContextRef.current.state === 'suspended') {
+                inputAudioContextRef.current.resume().catch(console.error);
+            }
+            if (outputAudioContextRef.current.state === 'suspended') {
+                outputAudioContextRef.current.resume().catch(console.error);
+            }
 
             mediaStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -548,8 +556,17 @@ const AIChatAssistant: React.FC = () => {
                             const pcmBlob = createBlob(inputData);
                             sessionPromiseRef.current?.then((session) => {
                                 // Double-check we're still listening before sending
-                                if (isListeningRef.current) {
-                                    session.sendRealtimeInput({ media: pcmBlob });
+                                if (!isListeningRef.current) return;
+                                try {
+                                    if (session && typeof (session as any).sendRealtimeInput === 'function') {
+                                        (session as any).sendRealtimeInput({ media: pcmBlob });
+                                    }
+                                } catch (e) {
+                                    // Swallow CLOSED/CLOSING websocket errors to avoid console spam
+                                    const msg = (e as Error)?.message || '';
+                                    if (!msg.toLowerCase().includes('closing') && !msg.toLowerCase().includes('closed')) {
+                                        console.error('Error sending audio input:', e);
+                                    }
                                 }
                             }).catch((err) => {
                                 console.error('Error sending audio input:', err);
@@ -642,14 +659,27 @@ const AIChatAssistant: React.FC = () => {
                         const base64Audio = inlineData?.data;
                         
                         if (base64Audio && outputAudioContextRef.current && isListeningRef.current) {
-                            nextStartTime.current = Math.max(nextStartTime.current, outputAudioContextRef.current.currentTime);
+                            // Ensure audio context is resumed (browser may suspend it)
+                            if (outputAudioContextRef.current.state === 'suspended') {
+                                await outputAudioContextRef.current.resume();
+                            }
+                            
+                            // Use lookahead buffer to prevent audio stuttering from scheduling too close to current time
+                            // IMPORTANT: Audio chunks are queued sequentially - multiple chunks from the same response
+                            // will play one after another without gaps, even if previous chunks are still playing
+                            const lookAheadTime = 0.1; // 100ms buffer to prevent underruns
+                            const currentTime = outputAudioContextRef.current.currentTime;
+                            // Queue audio chunks sequentially - nextStartTime tracks where the next chunk should start
+                            const startTime = Math.max(nextStartTime.current, currentTime + lookAheadTime);
+                            
                             const audioBuffer = await decodeAudioData(decode(base64Audio), outputAudioContextRef.current, 24000, 1);
                             const source = outputAudioContextRef.current.createBufferSource();
                             source.buffer = audioBuffer;
                             source.connect(outputAudioContextRef.current.destination);
                             source.addEventListener('ended', () => sources.current.delete(source));
-                            source.start(nextStartTime.current);
-                            nextStartTime.current += audioBuffer.duration;
+                            source.start(startTime);
+                            // Update next start time for proper queuing of subsequent chunks
+                            nextStartTime.current = startTime + audioBuffer.duration;
                             sources.current.add(source);
                         }
                     } catch (audioError) {

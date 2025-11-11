@@ -233,6 +233,110 @@ interface TimetableProps {
     user?: { name: string; email: string; id: string };
 }
 
+// Availability Badge Component
+const AvailabilityBadge: React.FC<{ facultyId: string; user?: { name: string; email: string; id: string } }> = ({ facultyId, user }) => {
+    const [isFree, setIsFree] = useState<boolean | null>(null);
+    const [currentSlot, setCurrentSlot] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+
+        useEffect(() => {
+        const checkAvailability = async () => {
+            try {
+                // Map email to short_name
+                const emailToShortName: Record<string, string> = {
+                    'lakshmidurgan@gmail.com': 'ldn',
+                    'anithacs@gmail.com': 'acs',
+                    'gdhivyasri@gmail.com': 'gd',
+                    'nishask@gmail.com': 'nsk',
+                    'amarnathbpatil@gmail.com': 'abp',
+                    'nagashreen@gmail.com': 'nn',
+                    'jyotikumari@gmail.com': 'jk',
+                    'vidyashreer@gmail.com': 'vr',
+                    'bhavanaa@gmail.com': 'ba',
+                    'bhavyatn@gmail.com': 'btn',
+                };
+                
+                const userEmail = user?.email?.toLowerCase() || '';
+                const shortName = emailToShortName[userEmail] || facultyId;
+                
+                const API_BASE = (import.meta as any).env?.VITE_API_BASE || 
+                    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
+                const apiUrl = `${API_BASE}/api/faculty/${shortName}/availability/now`;
+                
+                console.log('[AvailabilityBadge] Checking availability:', { userEmail, shortName, apiUrl });
+                
+                // Faculty availability API doesn't require auth for public queries
+                const response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    // Don't send credentials for public API
+                });
+                console.log('[AvailabilityBadge] Response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('[AvailabilityBadge] Availability data:', data);
+                    setIsFree(data.free);
+                    if (!data.free && data.currentSlot) {
+                        setCurrentSlot(data.currentSlot.subject_name || 'Class');
+                    } else {
+                        setCurrentSlot(null);
+                    }
+                } else {
+                    const errorText = await response.text();
+                    console.warn('[AvailabilityBadge] API error:', response.status, errorText);
+                    setIsFree(null);
+                }
+            } catch (error: any) {
+                console.error('[AvailabilityBadge] Error checking availability:', error);
+                setIsFree(null);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+
+        // Check availability immediately and then every minute
+        checkAvailability();
+        const interval = setInterval(checkAvailability, 60000); // Update every minute
+
+        return () => clearInterval(interval);
+    }, [facultyId, user]);
+
+    // Show loading state
+    if (isLoading) {
+        return (
+            <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-sm bg-slate-500/20 text-slate-400">
+                <span className="w-2 h-2 rounded-full bg-slate-400 animate-pulse"></span>
+                <span>Checking availability...</span>
+            </div>
+        );
+    }
+
+    // Show error state (API failed or feature disabled)
+    if (isFree === null) {
+        return (
+            <div className="flex items-center space-x-2 px-3 py-1 rounded-full text-sm bg-yellow-500/20 text-yellow-400">
+                <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                <span>Availability unavailable</span>
+            </div>
+        );
+    }
+
+    // Show availability state
+    return (
+        <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
+            isFree 
+                ? 'bg-green-500/20 text-green-400' 
+                : 'bg-orange-500/20 text-orange-400'
+        }`}>
+            <span className={`w-2 h-2 rounded-full ${isFree ? 'bg-green-400' : 'bg-orange-400'}`}></span>
+            <span>{isFree ? 'Available Now' : currentSlot ? `Teaching: ${currentSlot}` : 'Busy'}</span>
+        </div>
+    );
+};
+
 const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpdate, user }) => {
     const [selectedSemester, setSelectedSemester] = useState<string>("5th Semester");
     const [semesterData, setSemesterData] = useState<SemesterTimetable | null>(null);
@@ -256,7 +360,7 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
     // Check if user is admin (HOD or admin role)
     const isAdmin = user?.email?.toLowerCase() === 'nagashreen@gmail.com' ||
                    user?.name?.toLowerCase().includes('nagashreen') ||
-                   user?.role === 'admin';
+                   (user as any)?.role === 'admin';
     
     // All logged-in staff can edit their own timetables
     const canEditTimetable = !!canEdit;
@@ -284,9 +388,100 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                 // Normalize facultyId - use email prefix (before @) or id directly
                 const normalizedFacultyId = facultyId.includes('@') ? facultyId.split('@')[0] : facultyId;
                 
-                // Try to load from API first (primary source)
+                // Try to load from new faculty schedule API first (if feature enabled)
+                // Map email to short_name (e.g., anithacs@gmail.com -> acs)
+                const emailToShortName: Record<string, string> = {
+                    'lakshmidurgan@gmail.com': 'ldn',
+                    'anithacs@gmail.com': 'acs',
+                    'gdhivyasri@gmail.com': 'gd',
+                    'nishask@gmail.com': 'nsk',
+                    'amarnathbpatil@gmail.com': 'abp',
+                    'nagashreen@gmail.com': 'nn',
+                    'jyotikumari@gmail.com': 'jk',
+                    'vidyashreer@gmail.com': 'vr',
+                    'bhavanaa@gmail.com': 'ba',
+                    'bhavyatn@gmail.com': 'btn',
+                };
+                
+                const userEmail = user?.email?.toLowerCase() || '';
+                const shortName = emailToShortName[userEmail] || normalizedFacultyId;
+                
+                // Check if new schedule API is available (feature flag)
+                const scheduleFeatureEnabled = (import.meta as any).env?.VITE_FEATURE_SCHEDULE_V1 !== 'false';
+                console.log('[Timetable] Schedule feature enabled:', scheduleFeatureEnabled);
+                console.log('[Timetable] Loading timetable for:', { userEmail, shortName, normalizedFacultyId, selectedSemester });
+                
+                if (scheduleFeatureEnabled) {
+                    try {
+                        const API_BASE = (import.meta as any).env?.VITE_API_BASE || 
+                            (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080');
+                        const apiUrl = `${API_BASE}/api/faculty/${shortName}/schedule`;
+                        console.log('[Timetable] Fetching from new schedule API:', apiUrl);
+                        
+                        // Faculty schedule API doesn't require auth for public queries
+                        const response = await fetch(apiUrl, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            // Don't send credentials for public API
+                        });
+                        console.log('[Timetable] API response status:', response.status);
+                        
+                        if (response.ok) {
+                            const scheduleData = await response.json();
+                            console.log('[Timetable] Successfully loaded schedule data:', scheduleData);
+                            
+                            // Convert new API format to SemesterTimetable format
+                            const convertedData: SemesterTimetable = {
+                                faculty: scheduleData.faculty.faculty_name,
+                                designation: scheduleData.faculty.designation || '',
+                                semester: selectedSemester,
+                                schedule: scheduleData.schedule.reduce((acc: any, day: any) => {
+                                    acc[day.day] = day.slots.map((slot: any) => ({
+                                        time: `${slot.start_time}-${slot.end_time}`,
+                                        subject: slot.subject_name,
+                                        subjectCode: slot.subject_code || '',
+                                        courseName: slot.subject_name,
+                                        classType: 'Theory' as const,
+                                        batch: slot.class_details || '',
+                                    }));
+                                    return acc;
+                                }, {}),
+                            };
+                            
+                            console.log('[Timetable] Converted data:', convertedData);
+                            setSemesterData(convertedData);
+                            setEditableSemesterData(JSON.parse(JSON.stringify(convertedData)));
+                            setIsLoading(false);
+                            setToastMessage('Timetable loaded from schedule system');
+                            setToastType('success');
+                            setShowToast(true);
+                            return;
+                        } else {
+                            const errorText = await response.text();
+                            console.warn('[Timetable] New schedule API returned error:', response.status, errorText);
+                            setToastMessage(`Schedule API error: ${response.status}. Falling back to old API.`);
+                            setToastType('error');
+                            setShowToast(true);
+                        }
+                    } catch (scheduleError: any) {
+                        console.error('[Timetable] New schedule API error:', scheduleError);
+                        console.log('[Timetable] Falling back to old API');
+                        setToastMessage('New schedule API unavailable. Using fallback.');
+                        setToastType('error');
+                        setShowToast(true);
+                        // Fall through to old API
+                    }
+                } else {
+                    console.log('[Timetable] Schedule feature disabled, using old API');
+                }
+                
+                // Try to load from old API (primary source)
                 try {
+                    console.log('[Timetable] Loading from old timetable API:', { normalizedFacultyId, selectedSemester });
                     const apiData = await timetableApi.getTimetable(normalizedFacultyId, selectedSemester);
+                    console.log('[Timetable] Old API response:', apiData);
                     
                     // Convert API response to SemesterTimetable format
                     const convertedData: SemesterTimetable = {
@@ -301,16 +496,24 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                     
                     // Save to localStorage as backup
                     saveToLocalStorage(normalizedFacultyId, selectedSemester, convertedData);
+                    setIsLoading(false);
+                    setToastMessage('Timetable loaded successfully');
+                    setToastType('success');
+                    setShowToast(true);
                     return;
                 } catch (apiError: any) {
                     // If API fails (404 or other), try localStorage
-                    console.log('API load failed, trying localStorage:', apiError.message);
+                    console.warn('[Timetable] Old API load failed, trying localStorage:', apiError.message);
                     
                     const localData = loadFromLocalStorage(normalizedFacultyId, selectedSemester);
                     if (localData) {
-                        console.log('Loaded timetable from localStorage');
+                        console.log('[Timetable] Loaded timetable from localStorage');
                         setSemesterData(localData);
                         setEditableSemesterData(JSON.parse(JSON.stringify(localData)));
+                        setIsLoading(false);
+                        setToastMessage('Timetable loaded from local storage');
+                        setToastType('success');
+                        setShowToast(true);
                         return;
                     }
                     
@@ -368,6 +571,7 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                             // Still save to localStorage even if DB save fails
                             saveToLocalStorage(normalizedFacultyId, selectedSemester, defaultData);
                         }
+                        setIsLoading(false);
                         return;
                     } else {
                         console.log('Not Dr. Dhivyasri G or not 5th semester', { selectedSemester, userEmail, userName, userId });
@@ -377,6 +581,7 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                     console.log('No saved data found for this semester - showing blank timetable');
                     setSemesterData(null);
                     setEditableSemesterData(null);
+                    setIsLoading(false);
                     return;
                 }
             } catch (error: any) {
@@ -574,7 +779,7 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
                         const currentData = semesterData;
                         const updatedData: SemesterTimetable = {
                             faculty: user?.name || currentData?.faculty || 'Unknown',
-                            designation: user?.department || currentData?.designation || '',
+                            designation: (user as any)?.department || currentData?.designation || '',
                             semester: selectedSemester,
                             schedule: customEvent.detail.schedule,
                         };
@@ -1065,14 +1270,19 @@ const Timetable: React.FC<TimetableProps> = ({ initialTimetable, onTimetableUpda
 
             {(semesterData || (editableSemesterData && isEditing)) && (
                 <div className="mb-4 p-3 bg-slate-800/50 rounded-lg border border-slate-700/50">
-                    <p className="text-lg font-bold text-white">
-                        {(semesterData || editableSemesterData)?.faculty || user?.name || 'Faculty'}
-                    </p>
-                    {((semesterData || editableSemesterData)?.designation || user?.name) && (
-                        <p className="text-sm text-slate-400">
-                            {(semesterData || editableSemesterData)?.designation || ''} • {selectedSemester}
-                        </p>
-                    )}
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <p className="text-lg font-bold text-white">
+                                {(semesterData || editableSemesterData)?.faculty || user?.name || 'Faculty'}
+                            </p>
+                            {((semesterData || editableSemesterData)?.designation || user?.name) && (
+                                <p className="text-sm text-slate-400">
+                                    {(semesterData || editableSemesterData)?.designation || ''} • {selectedSemester}
+                                </p>
+                            )}
+                        </div>
+                        <AvailabilityBadge facultyId={facultyId} user={user} />
+                    </div>
                 </div>
             )}
             

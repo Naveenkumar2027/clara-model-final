@@ -1,0 +1,10 @@
+﻿NODE_ENV=production
+ENABLE_UNIFIED_MODE=true
+PORT=10000
+JWT_SECRET=yHQRkqrOAjxGBWF290tnavKz8TumZh35
+DATABASE_URL=[paste-internal-database-url]
+CORS_ORIGINS=https://clara-unified-production.onrender.com
+FEATURE_SCHEDULE_V1=true
+SOCKET_PATH=/socket
+CLIENT_PUBLIC_PATH=/
+STAFF_PUBLIC_PATH=/staff
